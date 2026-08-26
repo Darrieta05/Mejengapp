@@ -11,7 +11,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { demoSnapshot } from '../data/demo';
-import type { CreateMatchInput, CreatePlayerInput } from '../types/actions';
+import type { CreateMatchInput, CreatePlayerInput, UpdateMatchInput } from '../types/actions';
 import type { AppSnapshot, Match, Player } from '../types/models';
 import { getFirebaseServices, isFirebaseConfigured } from './firebase';
 
@@ -122,6 +122,21 @@ export async function deletePlayer(playerId: string): Promise<void> {
   await deleteDoc(doc(db, 'players', playerId));
 }
 
+export async function updatePlayerName(playerId: string, nombre: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    localSnapshot = {
+      ...localSnapshot,
+      players: localSnapshot.players.map((player) =>
+        player.id === playerId ? { ...player, nombre } : player
+      )
+    };
+    return;
+  }
+
+  const { db } = getFirebaseServices();
+  await updateDoc(doc(db, 'players', playerId), { nombre });
+}
+
 export async function createMatch(input: CreateMatchInput): Promise<void> {
   const payload = {
     nombre: input.nombre,
@@ -156,6 +171,31 @@ export async function deleteMatch(matchId: string): Promise<void> {
 
   const { db } = getFirebaseServices();
   await deleteDoc(doc(db, 'matches', matchId));
+}
+
+export async function updateMatch(input: UpdateMatchInput): Promise<void> {
+  const payload = {
+    nombre: input.nombre,
+    fechaISO: input.fechaISO,
+    team1PlayerIds: input.team1PlayerIds,
+    team2PlayerIds: input.team2PlayerIds,
+    resultado: input.resultado,
+    mvpPlayerId: input.mvpPlayerId,
+    asistencia: input.team1PlayerIds.length + input.team2PlayerIds.length
+  };
+
+  if (!isFirebaseConfigured()) {
+    localSnapshot = {
+      ...localSnapshot,
+      matches: localSnapshot.matches.map((match) =>
+        match.id === input.id ? { ...match, ...payload } : match
+      )
+    };
+    return;
+  }
+
+  const { db } = getFirebaseServices();
+  await updateDoc(doc(db, 'matches', input.id), payload);
 }
 
 export async function setWrappedEnabled(enabled: boolean): Promise<void> {

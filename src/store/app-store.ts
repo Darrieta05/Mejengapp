@@ -5,9 +5,11 @@ import {
   deleteMatch,
   deletePlayer,
   getSnapshot,
+  updateMatch,
+  updatePlayerName,
   setWrappedEnabled
 } from '../services/repository';
-import type { CreateMatchInput } from '../types/actions';
+import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
 import type { AdminSession } from '../types/auth';
 import type { AppSnapshot } from '../types/models';
 
@@ -90,6 +92,12 @@ class AppStore extends EventTarget {
     });
   }
 
+  async renamePlayer(playerId: string, nombre: string): Promise<void> {
+    await this.runMutation(async () => {
+      await updatePlayerName(playerId, nombre);
+    });
+  }
+
   async addMatch(input: CreateMatchInput): Promise<void> {
     await this.runMutation(async () => {
       await createMatch(input);
@@ -99,6 +107,12 @@ class AppStore extends EventTarget {
   async removeMatch(matchId: string): Promise<void> {
     await this.runMutation(async () => {
       await deleteMatch(matchId);
+    });
+  }
+
+  async editMatch(input: UpdateMatchInput): Promise<void> {
+    await this.runMutation(async () => {
+      await updateMatch(input);
     });
   }
 

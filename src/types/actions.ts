@@ -12,3 +12,7 @@ export interface CreateMatchInput {
   resultado: MatchResult;
   mvpPlayerId: string | null;
 }
+
+export interface UpdateMatchInput extends CreateMatchInput {
+  id: string;
+}

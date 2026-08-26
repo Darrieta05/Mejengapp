@@ -1,17 +1,29 @@
-import { Chart, type ChartConfiguration, registerables } from 'chart.js';
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { Match, Player } from '../types/models';
 import { buildEvolutionSeries, buildStandings, byDateAsc } from '../utils/calculations';
 
-Chart.register(...registerables);
+type ChartType = import('chart.js').Chart;
+type LineChartConfig = import('chart.js').ChartConfiguration<'line'>;
+
+let chartLoader: Promise<typeof import('chart.js')> | null = null;
+
+function loadChartJs() {
+  if (!chartLoader) {
+    chartLoader = import('chart.js').then((mod) => {
+      mod.Chart.register(...mod.registerables);
+      return mod;
+    });
+  }
+  return chartLoader;
+}
 
 @customElement('evolution-section')
 export class EvolutionSection extends LitElement {
   @property({ attribute: false }) players: Player[] = [];
   @property({ attribute: false }) matchList: Match[] = [];
 
-  private chart: Chart | null = null;
+  private chart: ChartType | null = null;
 
   firstUpdated(): void {
     this.renderChart();
@@ -28,9 +40,11 @@ export class EvolutionSection extends LitElement {
     this.chart?.destroy();
   }
 
-  private renderChart(): void {
+  private async renderChart(): Promise<void> {
     const canvas = this.renderRoot.querySelector('canvas');
     if (!canvas) return;
+
+    const chartJs = await loadChartJs();
 
     const standings = buildStandings(this.players, this.matchList).slice(0, 5);
     const topIds = standings.map((row) => row.playerId);
@@ -38,7 +52,7 @@ export class EvolutionSection extends LitElement {
     const series = buildEvolutionSeries(topIds, this.matchList);
 
     this.chart?.destroy();
-    const config: ChartConfiguration<'line'> = {
+    const config: LineChartConfig = {
       type: 'line',
       data: {
         labels,
@@ -63,7 +77,7 @@ export class EvolutionSection extends LitElement {
       }
     };
 
-    this.chart = new Chart(canvas, config);
+    this.chart = new chartJs.Chart(canvas, config);
   }
 
   render() {

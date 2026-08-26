@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/app-store';
 import { buildStandings } from '../utils/calculations';
 import { normalizePlayerName, validateMatchInput, validatePlayerName } from '../utils/validators';
-import type { CreateMatchInput } from '../types/actions';
+import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
 import type { AppSnapshot } from '../types/models';
 import type { AppTab } from '../components/tab-nav';
 import '../components/app-header';
@@ -91,6 +91,17 @@ export class MejengaApp extends LitElement {
     await appStore.removePlayer(event.detail.playerId);
   }
 
+  private async onUpdatePlayer(event: CustomEvent<{ playerId: string; nombre: string }>): Promise<void> {
+    if (!this.isAdmin) return;
+    const nombre = normalizePlayerName(event.detail.nombre);
+    const validationError = validatePlayerName(nombre);
+    if (validationError) {
+      this.error = validationError;
+      return;
+    }
+    await appStore.renamePlayer(event.detail.playerId, nombre);
+  }
+
   private async onCreateMatch(event: CustomEvent<CreateMatchInput>): Promise<void> {
     if (!this.isAdmin) return;
     const validationError = validateMatchInput(event.detail);
@@ -109,6 +120,16 @@ export class MejengaApp extends LitElement {
   private async onDeleteMatch(event: CustomEvent<{ matchId: string }>): Promise<void> {
     if (!this.isAdmin) return;
     await appStore.removeMatch(event.detail.matchId);
+  }
+
+  private async onUpdateMatch(event: CustomEvent<UpdateMatchInput>): Promise<void> {
+    if (!this.isAdmin) return;
+    const validationError = validateMatchInput(event.detail);
+    if (validationError) {
+      this.error = validationError;
+      return;
+    }
+    await appStore.editMatch(event.detail);
   }
 
   render() {
@@ -134,12 +155,16 @@ export class MejengaApp extends LitElement {
           ? html`
               <admin-panel
                 .players=${this.snapshot.players}
+                .matchList=${this.snapshot.matches}
                 .wrappedEnabled=${this.snapshot.config.wrappedEnabled}
                 .mutating=${this.mutating}
                 @logout-admin=${this.onLogoutAdmin}
                 @create-player=${this.onCreatePlayer}
                 @delete-player=${this.onDeletePlayer}
+                @update-player=${this.onUpdatePlayer}
                 @create-match=${this.onCreateMatch}
+                @update-match=${this.onUpdateMatch}
+                @delete-match=${this.onDeleteMatch}
                 @toggle-wrapped=${this.onToggleWrapped}
               ></admin-panel>
             `
