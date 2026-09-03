@@ -6,19 +6,75 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    match /players/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    match /matches/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
+    function membershipId(leagueId) {
+      return request.auth.uid + '_' + leagueId;
     }
 
-    match /config/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
+    function isLeagueMember(leagueId) {
+      return isSignedIn() &&
+        (isAdmin() || exists(/databases/$(database)/documents/memberships/$(membershipId(leagueId))));
+    }
+
+    function isLeagueAdmin(leagueId) {
+      return isAdmin() ||
+        (isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.adminUids);
+    }
+
+    match /leagues/{leagueId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.adminUids.size() == 1 &&
+        request.auth.uid in request.resource.data.adminUids;
+      allow update: if isLeagueAdmin(leagueId) &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.code == resource.data.code &&
+        request.resource.data.adminUids == resource.data.adminUids;
+      allow delete: if isLeagueAdmin(leagueId);
+
+      match /players/{id} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueAdmin(leagueId);
+      }
+
+      match /matches/{id} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueAdmin(leagueId);
+      }
+
+      match /config/{id} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if isLeagueAdmin(leagueId);
+      }
+    }
+
+    match /leagueCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.leagueId is string &&
+        getAfter(/databases/$(database)/documents/leagues/$(request.resource.data.leagueId)).data.createdBy == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/leagues/$(request.resource.data.leagueId)).data.code == code;
+      allow update, delete: if false;
+    }
+
+    match /memberships/{membershipId} {
+      allow read: if isSignedIn() &&
+        (resource.data.uid == request.auth.uid || isLeagueAdmin(resource.data.leagueId));
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        membershipId == request.resource.data.uid + '_' + request.resource.data.leagueId &&
+        ((request.resource.data.role == 'member' &&
+          request.resource.data.joinCode is string &&
+          exists(/databases/$(database)/documents/leagueCodes/$(request.resource.data.joinCode)) &&
+          get(/databases/$(database)/documents/leagueCodes/$(request.resource.data.joinCode)).data.leagueId == request.resource.data.leagueId) ||
+        (request.resource.data.role == 'admin' &&
+          getAfter(/databases/$(database)/documents/leagues/$(request.resource.data.leagueId)).data.createdBy == request.auth.uid));
+      allow update, delete: if isLeagueAdmin(resource.data.leagueId);
     }
 
     match /admins/{id} {

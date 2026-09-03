@@ -2,9 +2,16 @@ import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/app-store';
 import { buildStandings } from '../utils/calculations';
-import { normalizePlayerName, validateMatchInput, validatePlayerName } from '../utils/validators';
+import {
+  normalizePlayerName,
+  validateLeagueCode,
+  validateLeagueName,
+  validateMatchInput,
+  validatePlayerName
+} from '../utils/validators';
+import { normalizeLeagueCode } from '../utils/league-code';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
-import type { AppSnapshot } from '../types/models';
+import type { AppSnapshot, UserLeague } from '../types/models';
 import type { AppTab } from '../components/tab-nav';
 import '../components/app-header';
 import '../components/admin-panel';
@@ -14,6 +21,9 @@ import '../components/h2h-section';
 import '../components/evolution-section';
 import '../components/curios-section';
 import '../components/matches-section';
+import '../components/auth-gate';
+import '../components/league-chooser';
+import '../components/league-switcher';
 
 @customElement('mejenga-app')
 export class MejengaApp extends LitElement {
@@ -25,6 +35,9 @@ export class MejengaApp extends LitElement {
   @state() private sessionEmail: string | null = null;
   @state() private isAdmin = false;
   @state() private mutating = false;
+  @state() private memberships: UserLeague[] = [];
+  @state() private currentLeagueId: string | null = null;
+  @state() private showLeagueChooser = false;
 
   private unsubscribe: (() => void) | null = null;
 
@@ -45,7 +58,9 @@ export class MejengaApp extends LitElement {
     this.error = state.error;
     this.snapshot = state.snapshot;
     this.sessionEmail = state.session?.email ?? null;
-    this.isAdmin = Boolean(state.session?.isAdmin);
+    this.isAdmin = state.isLeagueAdmin;
+    this.memberships = state.memberships;
+    this.currentLeagueId = state.currentLeagueId;
     this.mutating = state.mutating;
 
     if (!this.isAdmin) {
@@ -73,6 +88,49 @@ export class MejengaApp extends LitElement {
 
   private async onLogoutAdmin(): Promise<void> {
     await appStore.logout();
+  }
+
+  private async onSignIn(): Promise<void> {
+    await appStore.login();
+  }
+
+  private async onLogout(): Promise<void> {
+    this.showLeagueChooser = false;
+    await appStore.logout();
+  }
+
+  private async onCreateLeague(event: CustomEvent<{ name: string }>): Promise<void> {
+    const name = event.detail.name.trim().replace(/\s+/g, ' ');
+    const validationError = validateLeagueName(name);
+    if (validationError) {
+      this.error = validationError;
+      return;
+    }
+    await appStore.createLeague(name);
+    if (appStore.getState().currentLeagueId) this.showLeagueChooser = false;
+  }
+
+  private async onJoinLeague(event: CustomEvent<{ code: string }>): Promise<void> {
+    const code = normalizeLeagueCode(event.detail.code);
+    const validationError = validateLeagueCode(code);
+    if (validationError) {
+      this.error = validationError;
+      return;
+    }
+    await appStore.joinLeague(code);
+    if (appStore.getState().currentLeagueId) this.showLeagueChooser = false;
+  }
+
+  private async onLeagueChange(event: CustomEvent<{ leagueId: string }>): Promise<void> {
+    await appStore.switchLeague(event.detail.leagueId);
+  }
+
+  private openLeagueChooser(): void {
+    this.showLeagueChooser = true;
+  }
+
+  private closeLeagueChooser(): void {
+    this.showLeagueChooser = false;
   }
 
   private async onCreatePlayer(event: CustomEvent<{ nombre: string }>): Promise<void> {
@@ -134,7 +192,33 @@ export class MejengaApp extends LitElement {
 
   render() {
     if (this.loading) return html`<main><p>Cargando datos...</p></main>`;
-    if (this.error) return html`<main><p class="error">${this.error}</p></main>`;
+    if (!this.sessionEmail) {
+      return html`<auth-gate .busy=${this.loading} .error=${this.error ?? ''} @sign-in=${this.onSignIn}></auth-gate>`;
+    }
+    if (this.memberships.length === 0) {
+      return html`
+        <league-chooser
+          .busy=${this.mutating}
+          .error=${this.error ?? ''}
+          @create-league=${this.onCreateLeague}
+          @join-league=${this.onJoinLeague}
+          @logout=${this.onLogout}
+        ></league-chooser>
+      `;
+    }
+    if (this.showLeagueChooser) {
+      return html`
+        <league-chooser
+          .busy=${this.mutating}
+          .canClose=${true}
+          .error=${this.error ?? ''}
+          @create-league=${this.onCreateLeague}
+          @join-league=${this.onJoinLeague}
+          @close-chooser=${this.closeLeagueChooser}
+          @logout=${this.onLogout}
+        ></league-chooser>
+      `;
+    }
     if (!this.snapshot) return html`<main><p>Sin datos</p></main>`;
 
     const standings = buildStandings(this.snapshot.players, this.snapshot.matches);
@@ -146,10 +230,22 @@ export class MejengaApp extends LitElement {
           .seasonLabel=${this.snapshot.config.seasonLabel}
           .leaderLabel=${leader ? `Lider: ${leader.nombre} (${leader.puntos} pts)` : 'Sin lider'}
           .adminMode=${this.isAdmin}
+          .userEmail=${this.sessionEmail}
           @toggle-admin=${this.onAdminToggle}
-        ></app-header>
+          @logout=${this.onLogout}
+        >
+          <league-switcher
+            slot="league-switcher"
+            .leagues=${this.memberships}
+            .currentLeagueId=${this.currentLeagueId ?? ''}
+            .disabled=${this.loading || this.mutating}
+            @league-change=${this.onLeagueChange}
+            @open-chooser=${this.openLeagueChooser}
+          ></league-switcher>
+        </app-header>
 
         ${this.renderAdminStatus()}
+        ${this.error ? html`<p class="error">${this.error}</p>` : null}
 
         ${this.isAdmin && this.showAdminPanel
           ? html`
