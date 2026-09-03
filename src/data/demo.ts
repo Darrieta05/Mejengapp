@@ -1,5 +1,15 @@
 import type { AppSnapshot } from '../types/models';
 
+export const demoSeason = {
+  id: 'demo-season-1',
+  leagueId: 'demo-league',
+  name: 'Temporada 2026',
+  startedAt: '2026-01-01T00:00:00.000Z',
+  endedAt: null,
+  status: 'active' as const,
+  matchCount: 3
+};
+
 export const demoSnapshot: AppSnapshot = {
   players: [
     { id: 'p1', nombre: 'Kevin', activo: true },
@@ -42,7 +52,8 @@ export const demoSnapshot: AppSnapshot = {
     }
   ],
   config: {
-    wrappedEnabled: false,
-    seasonLabel: 'Temporada 2026'
-  }
+    wrappedEnabled: false
+  },
+  season: demoSeason,
+  history: null
 };

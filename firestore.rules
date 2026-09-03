@@ -25,16 +25,24 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/leagues/$(leagueId)).data.adminUids);
     }
 
+    function isActiveSeason(leagueId, seasonId) {
+      return isLeagueMember(leagueId) &&
+        get(/databases/$(database)/documents/leagues/$(leagueId)).data.activeSeasonId == seasonId &&
+        get(/databases/$(database)/documents/leagues/$(leagueId)/seasons/$(seasonId)).data.status == 'active';
+    }
+
     match /leagues/{leagueId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.adminUids.size() == 1 &&
-        request.auth.uid in request.resource.data.adminUids;
+        request.auth.uid in request.resource.data.adminUids &&
+        request.resource.data.activeSeasonId is string;
       allow update: if isLeagueAdmin(leagueId) &&
         request.resource.data.createdBy == resource.data.createdBy &&
         request.resource.data.code == resource.data.code &&
-        request.resource.data.adminUids == resource.data.adminUids;
+        request.resource.data.adminUids == resource.data.adminUids &&
+        request.resource.data.activeSeasonId == resource.data.activeSeasonId;
       allow delete: if isLeagueAdmin(leagueId);
 
       match /players/{id} {
@@ -42,9 +50,32 @@ service cloud.firestore {
         allow write: if isLeagueAdmin(leagueId);
       }
 
-      match /matches/{id} {
+      match /seasons/{seasonId} {
         allow read: if isLeagueMember(leagueId);
-        allow write: if isLeagueAdmin(leagueId);
+        allow create: if isSignedIn() &&
+          request.resource.data.leagueId == leagueId &&
+          request.resource.data.status == 'active' &&
+          getAfter(/databases/$(database)/documents/leagues/$(leagueId)).data.createdBy == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/leagues/$(leagueId)).data.activeSeasonId == seasonId;
+        allow update: if isLeagueAdmin(leagueId) &&
+          isActiveSeason(leagueId, seasonId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['matchCount']);
+        allow delete: if false;
+
+        match /matches/{id} {
+          allow read: if isLeagueMember(leagueId);
+          allow create, update, delete: if isLeagueAdmin(leagueId) &&
+            isActiveSeason(leagueId, seasonId);
+        }
+      }
+
+      match /history/{seasonId} {
+        allow read: if isLeagueMember(leagueId);
+        allow write: if false;
+      }
+
+      match /seasonOperations/{operationId} {
+        allow read, write: if false;
       }
 
       match /config/{id} {

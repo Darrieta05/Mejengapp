@@ -9,6 +9,36 @@ export interface League {
   createdBy: string;
   createdAt: string;
   adminUids: string[];
+  activeSeasonId: string;
+}
+
+export type SeasonStatus = 'active' | 'ending' | 'ended';
+
+export interface Season {
+  id: string;
+  leagueId: string;
+  name: string;
+  startedAt: string;
+  endedAt: string | null;
+  status: SeasonStatus;
+  matchCount: number;
+}
+
+export interface SeasonHistory {
+  seasonId: string;
+  leagueId: string;
+  name: string;
+  startedAt: string;
+  endedAt: string;
+  matchCount: number;
+  playerCount: number;
+  totalAttendance: number;
+  finalStandings: StandingRow[];
+}
+
+export interface EndSeasonResult {
+  newSeason: Season;
+  history: SeasonHistory;
 }
 
 export interface LeagueMembership {
@@ -51,13 +81,15 @@ export interface Match {
 
 export interface AppConfig {
   wrappedEnabled: boolean;
-  seasonLabel: string;
+  seasonLabel?: string;
 }
 
 export interface AppSnapshot {
   players: Player[];
   matches: Match[];
   config: AppConfig;
+  season: Season;
+  history: SeasonHistory | null;
 }
 
 export interface StandingRow {

@@ -1,42 +1,52 @@
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
   orderBy,
   query,
   runTransaction,
-  setDoc,
-  updateDoc,
   where
 } from 'firebase/firestore';
-import type { CreateMatchInput, CreatePlayerInput, UpdateMatchInput } from '../types/actions';
 import type {
   AppSnapshot,
   League,
   LeagueMembership,
+  Season,
   UserLeague
 } from '../types/models';
 import {
   localLeagues,
   localMemberships,
+  localSeasons,
   localSnapshots,
+  getLocalSnapshot,
+  mapHistory,
   mapLeague,
   mapMembership,
   mapMatches,
-  mapPlayers
+  mapPlayers,
+  mapSeason,
+  snapshotKey
 } from './repository-support';
 import { generateLeagueCode, normalizeLeagueCode } from '../utils/league-code';
 import { getFirebaseServices, isFirebaseConfigured } from './firebase';
+export {
+  createMatch,
+  createPlayer,
+  deleteMatch,
+  deletePlayer,
+  editMatch as updateMatch,
+  renamePlayer as updatePlayerName,
+  setWrappedEnabled
+} from './repository-mutations';
+export { endSeason, getSeasons } from './repository-seasons';
 
 class LeagueCodeCollisionError extends Error {}
 
 function makeMembershipId(uid: string, leagueId: string): string {
   return `${uid}_${leagueId}`;
 }
-
 export async function getUserLeagues(uid: string): Promise<UserLeague[]> {
   if (!isFirebaseConfigured()) {
     return localMemberships
@@ -84,7 +94,8 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
       code,
       createdBy: uid,
       createdAt: new Date().toISOString(),
-      adminUids: [uid]
+      adminUids: [uid],
+      activeSeasonId: crypto.randomUUID()
     };
     const membership: LeagueMembership = {
       uid,
@@ -95,10 +106,22 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
     };
     localLeagues.push(league);
     localMemberships.push(membership);
-    localSnapshots.set(league.id, {
+    const season: Season = {
+      id: league.activeSeasonId,
+      leagueId: league.id,
+      name: 'Temporada',
+      startedAt: league.createdAt,
+      endedAt: null,
+      status: 'active',
+      matchCount: 0
+    };
+    localSeasons.set(league.id, [season]);
+    localSnapshots.set(snapshotKey(league.id, season.id), {
       players: [],
       matches: [],
-      config: { wrappedEnabled: false, seasonLabel: 'Temporada' }
+      config: { wrappedEnabled: false },
+      season,
+      history: null
     });
     return { league, membership };
   }
@@ -114,6 +137,7 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
 
         const leagueRef = doc(collection(db, 'leagues'));
         const membershipRef = doc(db, 'memberships', makeMembershipId(uid, leagueRef.id));
+          const seasonRef = doc(collection(db, 'leagues', leagueRef.id, 'seasons'));
         const createdAt = new Date().toISOString();
         const league: League = {
           id: leagueRef.id,
@@ -121,7 +145,17 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
           code,
           createdBy: uid,
           createdAt,
-          adminUids: [uid]
+          adminUids: [uid],
+          activeSeasonId: seasonRef.id
+        };
+        const season: Season = {
+          id: seasonRef.id,
+          leagueId: leagueRef.id,
+          name: 'Temporada',
+          startedAt: createdAt,
+          endedAt: null,
+          status: 'active',
+          matchCount: 0
         };
         const membership: LeagueMembership = {
           uid,
@@ -136,8 +170,10 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
           code,
           createdBy: uid,
           createdAt,
-          adminUids: [uid]
+          adminUids: [uid],
+          activeSeasonId: season.id
         });
+        transaction.set(seasonRef, season);
         transaction.set(codeRef, { leagueId: leagueRef.id });
         transaction.set(membershipRef, membership);
         return { league, membership };
@@ -198,23 +234,36 @@ export async function joinLeagueByCode(code: string, uid: string): Promise<UserL
   });
 }
 
-export async function getSnapshot(leagueId: string): Promise<AppSnapshot> {
+export async function getSnapshot(leagueId: string, seasonId?: string): Promise<AppSnapshot> {
   if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
+    const snapshot = getLocalSnapshot(leagueId, seasonId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     return snapshot;
   }
 
   const { db } = getFirebaseServices();
+  const leagueSnap = await getDoc(doc(db, 'leagues', leagueId));
+  if (!leagueSnap.exists()) throw new Error('No se encontro la liga.');
+  const league = mapLeague(leagueSnap.id, leagueSnap.data() as Record<string, unknown>);
+  const selectedSeasonId = seasonId ?? league.activeSeasonId;
+  if (!selectedSeasonId) throw new Error('La liga no tiene una temporada activa.');
   const playersQ = query(collection(db, 'leagues', leagueId, 'players'));
-  const matchesQ = query(collection(db, 'leagues', leagueId, 'matches'), orderBy('fechaISO', 'asc'));
+  const matchesQ = query(
+    collection(db, 'leagues', leagueId, 'seasons', selectedSeasonId, 'matches'),
+    orderBy('fechaISO', 'asc')
+  );
+  const seasonRef = doc(db, 'leagues', leagueId, 'seasons', selectedSeasonId);
+  const historyRef = doc(db, 'leagues', leagueId, 'history', selectedSeasonId);
   const configRef = doc(db, 'leagues', leagueId, 'config', 'global');
 
-  const [playersSnap, matchesSnap, configSnap] = await Promise.all([
+  const [playersSnap, matchesSnap, configSnap, seasonSnap, historySnap] = await Promise.all([
     getDocs(playersQ),
     getDocs(matchesQ),
-    getDoc(configRef)
+    getDoc(configRef),
+    getDoc(seasonRef),
+    getDoc(historyRef)
   ]);
+  if (!seasonSnap.exists()) throw new Error('No se encontro la temporada.');
 
   const players = mapPlayers(playersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
   const matches = mapMatches(matchesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -227,154 +276,11 @@ export async function getSnapshot(leagueId: string): Promise<AppSnapshot> {
     players,
     matches,
     config: {
-      wrappedEnabled: Boolean(configData.wrappedEnabled ?? false),
-      seasonLabel: String(configData.seasonLabel ?? 'Temporada')
-    }
+      wrappedEnabled: Boolean(configData.wrappedEnabled ?? false)
+    },
+    season: mapSeason(seasonSnap.id, seasonSnap.data() as Record<string, unknown>),
+    history: historySnap.exists()
+      ? mapHistory(historySnap.id, historySnap.data() as Record<string, unknown>)
+      : null
   };
-}
-
-export async function createPlayer(leagueId: string, input: CreatePlayerInput): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      players: [...snapshot.players, { id: crypto.randomUUID(), nombre: input.nombre, activo: true }]
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await addDoc(collection(db, 'leagues', leagueId, 'players'), {
-    nombre: input.nombre,
-    activo: true
-  });
-}
-
-export async function deletePlayer(leagueId: string, playerId: string): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      players: snapshot.players.filter((player) => player.id !== playerId),
-      matches: snapshot.matches.map((match) => ({
-        ...match,
-        team1PlayerIds: match.team1PlayerIds.filter((id) => id !== playerId),
-        team2PlayerIds: match.team2PlayerIds.filter((id) => id !== playerId),
-        mvpPlayerId: match.mvpPlayerId === playerId ? null : match.mvpPlayerId,
-        asistencia:
-          match.team1PlayerIds.filter((id) => id !== playerId).length +
-          match.team2PlayerIds.filter((id) => id !== playerId).length
-      }))
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId));
-}
-
-export async function updatePlayerName(
-  leagueId: string,
-  playerId: string,
-  nombre: string
-): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      players: snapshot.players.map((player) =>
-        player.id === playerId ? { ...player, nombre } : player
-      )
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), { nombre });
-}
-
-function matchPayload(input: CreateMatchInput) {
-  return {
-    nombre: input.nombre,
-    fechaISO: input.fechaISO,
-    team1PlayerIds: input.team1PlayerIds,
-    team2PlayerIds: input.team2PlayerIds,
-    resultado: input.resultado,
-    mvpPlayerId: input.mvpPlayerId,
-    asistencia: input.team1PlayerIds.length + input.team2PlayerIds.length
-  };
-}
-
-export async function createMatch(leagueId: string, input: CreateMatchInput): Promise<void> {
-  const payload = matchPayload(input);
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      matches: [...snapshot.matches, { id: crypto.randomUUID(), ...payload }]
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await addDoc(collection(db, 'leagues', leagueId, 'matches'), payload);
-}
-
-export async function deleteMatch(leagueId: string, matchId: string): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      matches: snapshot.matches.filter((match) => match.id !== matchId)
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await deleteDoc(doc(db, 'leagues', leagueId, 'matches', matchId));
-}
-
-export async function updateMatch(leagueId: string, input: UpdateMatchInput): Promise<void> {
-  const payload = matchPayload(input);
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      matches: snapshot.matches.map((match) =>
-        match.id === input.id ? { ...match, ...payload } : match
-      )
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'matches', input.id), payload);
-}
-
-export async function setWrappedEnabled(leagueId: string, enabled: boolean): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    const snapshot = localSnapshots.get(leagueId);
-    if (!snapshot) throw new Error('No se encontro la liga.');
-    localSnapshots.set(leagueId, {
-      ...snapshot,
-      config: { ...snapshot.config, wrappedEnabled: enabled }
-    });
-    return;
-  }
-
-  const { db } = getFirebaseServices();
-  const ref = doc(db, 'leagues', leagueId, 'config', 'global');
-  const existing = await getDoc(ref);
-
-  if (existing.exists()) {
-    await updateDoc(ref, { wrappedEnabled: enabled });
-  } else {
-    await setDoc(ref, { wrappedEnabled: enabled, seasonLabel: 'Temporada' });
-  }
 }

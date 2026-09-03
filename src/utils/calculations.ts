@@ -1,4 +1,4 @@
-import type { H2HStats, Match, Player, StandingRow } from '../types/models';
+import type { H2HStats, Match, Player, Season, SeasonHistory, StandingRow } from '../types/models';
 
 export function byDateAsc(matches: Match[]): Match[] {
   return [...matches].sort((a, b) => a.fechaISO.localeCompare(b.fechaISO));
@@ -50,6 +50,25 @@ export function buildStandings(players: Player[], matches: Match[]): StandingRow
   });
 
   return list;
+}
+
+export function buildSeasonHistory(
+  season: Season,
+  players: Player[],
+  matches: Match[],
+  endedAt: string
+): SeasonHistory {
+  return {
+    seasonId: season.id,
+    leagueId: season.leagueId,
+    name: season.name,
+    startedAt: season.startedAt,
+    endedAt,
+    matchCount: matches.length,
+    playerCount: players.length,
+    totalAttendance: matches.reduce((total, match) => total + match.asistencia, 0),
+    finalStandings: buildStandings(players, matches)
+  };
 }
 
 export function calculateH2H(player1Id: string, player2Id: string, matches: Match[]): H2HStats {

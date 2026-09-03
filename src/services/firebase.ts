@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
 let app: FirebaseApp | null = null;
 
@@ -37,6 +38,7 @@ export function getFirebaseServices() {
   const firebaseApp = getFirebaseApp();
   return {
     auth: getAuth(firebaseApp),
-    db: getFirestore(firebaseApp)
+    db: getFirestore(firebaseApp),
+    functions: getFunctions(firebaseApp)
   };
 }

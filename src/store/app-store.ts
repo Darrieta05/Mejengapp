@@ -8,13 +8,15 @@ import {
   getUserLeagues,
   getSnapshot,
   joinLeagueByCode,
+  endSeason as endSeasonRecord,
+  getSeasons,
   updateMatch,
   updatePlayerName,
   setWrappedEnabled
 } from '../services/repository';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
 import type { AdminSession } from '../types/auth';
-import type { AppSnapshot, UserLeague } from '../types/models';
+import type { AppSnapshot, Season, UserLeague } from '../types/models';
 
 export interface AppStoreState {
   loading: boolean;
@@ -23,6 +25,8 @@ export interface AppStoreState {
   session: AdminSession | null;
   memberships: UserLeague[];
   currentLeagueId: string | null;
+  seasons: Season[];
+  currentSeasonId: string | null;
   isLeagueAdmin: boolean;
   mutating: boolean;
 }
@@ -38,6 +42,8 @@ class AppStore extends EventTarget {
     session: null,
     memberships: [],
     currentLeagueId: null,
+    seasons: [],
+    currentSeasonId: null,
     isLeagueAdmin: false,
     mutating: false
   };
@@ -108,6 +114,43 @@ class AppStore extends EventTarget {
     await this.activateLeague(leagueId, this.state.memberships);
   }
 
+  async switchSeason(seasonId: string): Promise<void> {
+    const leagueId = this.state.currentLeagueId;
+    if (!leagueId || !this.state.seasons.some((season) => season.id === seasonId)) {
+      this.patch({ error: 'La temporada no esta disponible.' });
+      return;
+    }
+    await this.activateSeason(leagueId, seasonId, this.state.memberships, this.state.seasons);
+  }
+
+  async endCurrentSeason(newSeasonName: string): Promise<void> {
+    const leagueId = this.state.currentLeagueId;
+    const uid = this.state.session?.uid;
+    if (!leagueId || !uid || !this.state.snapshot || this.state.snapshot.season.status !== 'active') {
+      this.patch({ error: 'No hay una temporada activa para cerrar.' });
+      return;
+    }
+    this.patch({ mutating: true, error: null });
+    try {
+      await endSeasonRecord(leagueId, newSeasonName, crypto.randomUUID());
+      const [memberships, seasons] = await Promise.all([getUserLeagues(uid), getSeasons(leagueId)]);
+      const snapshot = await getSnapshot(leagueId);
+      this.patch({
+        memberships,
+        seasons,
+        currentSeasonId: snapshot.season.id,
+        snapshot,
+        currentLeagueId: leagueId,
+        mutating: false
+      });
+    } catch (error) {
+      this.patch({
+        mutating: false,
+        error: error instanceof Error ? error.message : 'No se pudo cerrar la temporada.'
+      });
+    }
+  }
+
   async addPlayer(nombre: string): Promise<void> {
     await this.runMutation(async (leagueId) => {
       await createPlayer(leagueId, { nombre });
@@ -127,20 +170,20 @@ class AppStore extends EventTarget {
   }
 
   async addMatch(input: CreateMatchInput): Promise<void> {
-    await this.runMutation(async (leagueId) => {
-      await createMatch(leagueId, input);
+    await this.runMutation(async (leagueId, seasonId) => {
+      await createMatch(leagueId, seasonId, input);
     });
   }
 
   async removeMatch(matchId: string): Promise<void> {
-    await this.runMutation(async (leagueId) => {
-      await deleteMatch(leagueId, matchId);
+    await this.runMutation(async (leagueId, seasonId) => {
+      await deleteMatch(leagueId, seasonId, matchId);
     });
   }
 
   async editMatch(input: UpdateMatchInput): Promise<void> {
-    await this.runMutation(async (leagueId) => {
-      await updateMatch(leagueId, input);
+    await this.runMutation(async (leagueId, seasonId) => {
+      await updateMatch(leagueId, seasonId, input);
     });
   }
 
@@ -150,7 +193,7 @@ class AppStore extends EventTarget {
     });
   }
 
-  private async runMutation(action: (leagueId: string) => Promise<void>): Promise<void> {
+  private async runMutation(action: (leagueId: string, seasonId: string) => Promise<void>): Promise<void> {
     const leagueId = this.state.currentLeagueId;
     if (!leagueId) {
       this.patch({ error: 'Selecciona una liga para continuar.' });
@@ -158,7 +201,12 @@ class AppStore extends EventTarget {
     }
     this.patch({ mutating: true, error: null });
     try {
-      await action(leagueId);
+      const seasonId = this.state.snapshot?.season.id;
+      if (!seasonId) {
+        this.patch({ mutating: false, error: 'No hay una temporada activa.' });
+        return;
+      }
+      await action(leagueId, seasonId);
       const snapshot = await getSnapshot(leagueId);
       this.patch({ snapshot, mutating: false });
     } catch (error) {
@@ -177,6 +225,8 @@ class AppStore extends EventTarget {
         session: null,
         memberships: [],
         currentLeagueId: null,
+        seasons: [],
+        currentSeasonId: null,
         isLeagueAdmin: false,
         snapshot: null,
         loading: false,
@@ -189,6 +239,8 @@ class AppStore extends EventTarget {
       session,
       memberships: [],
       currentLeagueId: null,
+      seasons: [],
+      currentSeasonId: null,
       isLeagueAdmin: false,
       snapshot: null,
       loading: true,
@@ -206,12 +258,15 @@ class AppStore extends EventTarget {
         return;
       }
 
+      const seasons = await getSeasons(selected.league.id);
       const snapshot = await getSnapshot(selected.league.id);
       if (requestId !== this.sessionRequestId) return;
       localStorage.setItem('mejenga:currentLeagueId', selected.league.id);
       this.patch({
         memberships,
         currentLeagueId: selected.league.id,
+        seasons,
+        currentSeasonId: snapshot.season.id,
         isLeagueAdmin: session.isAdmin || selected.membership.role === 'admin',
         snapshot,
         loading: false
@@ -257,13 +312,32 @@ class AppStore extends EventTarget {
       isLeagueAdmin
     });
     try {
+      const seasons = await getSeasons(leagueId);
       const snapshot = await getSnapshot(leagueId);
       localStorage.setItem('mejenga:currentLeagueId', leagueId);
-      this.patch({ snapshot, loading: false });
+      this.patch({ snapshot, seasons, currentSeasonId: snapshot.season.id, loading: false });
     } catch (error) {
       this.patch({
         loading: false,
         error: error instanceof Error ? error.message : 'No se pudo cargar la liga.'
+      });
+    }
+  }
+
+  private async activateSeason(
+    leagueId: string,
+    seasonId: string,
+    memberships: UserLeague[],
+    seasons: Season[]
+  ): Promise<void> {
+    this.patch({ loading: true, error: null, snapshot: null, memberships, seasons, currentSeasonId: seasonId });
+    try {
+      const snapshot = await getSnapshot(leagueId, seasonId);
+      this.patch({ snapshot, loading: false });
+    } catch (error) {
+      this.patch({
+        loading: false,
+        error: error instanceof Error ? error.message : 'No se pudo cargar la temporada.'
       });
     }
   }
