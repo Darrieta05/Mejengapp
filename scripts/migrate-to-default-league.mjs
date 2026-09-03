@@ -46,6 +46,7 @@ const leagueRef = db.collection('leagues').doc(leagueId);
 if ((await leagueRef.get()).exists) throw new Error(`La liga ${leagueId} ya existe.`);
 const code = await uniqueCode();
 const now = new Date().toISOString();
+const seasonRef = leagueRef.collection('seasons').doc();
 const config = oldConfig.exists
   ? oldConfig.data()
   : { wrappedEnabled: false, seasonLabel: 'Temporada' };
@@ -54,7 +55,16 @@ const league = {
   code,
   createdBy,
   createdAt: now,
-  adminUids: leagueAdminUids
+  adminUids: leagueAdminUids,
+  activeSeasonId: seasonRef.id
+};
+const season = {
+  leagueId,
+  name: String(config.seasonLabel || 'Temporada'),
+  startedAt: now,
+  endedAt: null,
+  status: 'active',
+  matchCount: oldMatches.size
 };
 
 const operations = [
@@ -62,10 +72,11 @@ const operations = [
   { ref: db.collection('leagueCodes').doc(code), data: { leagueId } },
   {
     ref: leagueRef.collection('config').doc('global'),
-    data: { wrappedEnabled: Boolean(config.wrappedEnabled), seasonLabel: String(config.seasonLabel || 'Temporada') }
+    data: { wrappedEnabled: Boolean(config.wrappedEnabled) }
   },
+  { ref: seasonRef, data: season },
   ...oldPlayers.docs.map((item) => ({ ref: leagueRef.collection('players').doc(item.id), data: item.data() })),
-  ...oldMatches.docs.map((item) => ({ ref: leagueRef.collection('matches').doc(item.id), data: item.data() })),
+  ...oldMatches.docs.map((item) => ({ ref: seasonRef.collection('matches').doc(item.id), data: item.data() })),
   ...leagueAdminUids.map((uid) => ({
     ref: db.collection('memberships').doc(`${uid}_${leagueId}`),
     data: { uid, leagueId, role: 'admin', joinCode: '', joinedAt: now }

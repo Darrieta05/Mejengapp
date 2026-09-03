@@ -11,7 +11,7 @@ import {
 } from '../utils/validators';
 import { normalizeLeagueCode } from '../utils/league-code';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
-import type { AppSnapshot, UserLeague } from '../types/models';
+import type { AppSnapshot, Season, UserLeague } from '../types/models';
 import type { AppTab } from '../components/tab-nav';
 import '../components/app-header';
 import '../components/admin-panel';
@@ -24,6 +24,8 @@ import '../components/matches-section';
 import '../components/auth-gate';
 import '../components/league-chooser';
 import '../components/league-switcher';
+import '../components/season-switcher';
+import '../components/season-history';
 
 @customElement('mejenga-app')
 export class MejengaApp extends LitElement {
@@ -37,6 +39,7 @@ export class MejengaApp extends LitElement {
   @state() private mutating = false;
   @state() private memberships: UserLeague[] = [];
   @state() private currentLeagueId: string | null = null;
+  @state() private seasons: Season[] = [];
   @state() private showLeagueChooser = false;
 
   private unsubscribe: (() => void) | null = null;
@@ -61,6 +64,7 @@ export class MejengaApp extends LitElement {
     this.isAdmin = state.isLeagueAdmin;
     this.memberships = state.memberships;
     this.currentLeagueId = state.currentLeagueId;
+    this.seasons = state.seasons;
     this.mutating = state.mutating;
 
     if (!this.isAdmin) {
@@ -123,6 +127,14 @@ export class MejengaApp extends LitElement {
 
   private async onLeagueChange(event: CustomEvent<{ leagueId: string }>): Promise<void> {
     await appStore.switchLeague(event.detail.leagueId);
+  }
+
+  private async onSeasonChange(event: CustomEvent<{ seasonId: string }>): Promise<void> {
+    await appStore.switchSeason(event.detail.seasonId);
+  }
+
+  private async onEndSeason(event: CustomEvent<{ name: string }>): Promise<void> {
+    await appStore.endCurrentSeason(event.detail.name);
   }
 
   private openLeagueChooser(): void {
@@ -227,7 +239,7 @@ export class MejengaApp extends LitElement {
     return html`
       <main>
         <app-header
-          .seasonLabel=${this.snapshot.config.seasonLabel}
+          .seasonLabel=${this.snapshot.season.name}
           .leaderLabel=${leader ? `Lider: ${leader.nombre} (${leader.puntos} pts)` : 'Sin lider'}
           .adminMode=${this.isAdmin}
           .userEmail=${this.sessionEmail}
@@ -242,16 +254,24 @@ export class MejengaApp extends LitElement {
             @league-change=${this.onLeagueChange}
             @open-chooser=${this.openLeagueChooser}
           ></league-switcher>
+          <season-switcher
+            slot="season-switcher"
+            .seasons=${this.seasons}
+            .currentSeasonId=${this.snapshot.season.id}
+            .disabled=${this.loading || this.mutating}
+            @season-change=${this.onSeasonChange}
+          ></season-switcher>
         </app-header>
 
         ${this.renderAdminStatus()}
         ${this.error ? html`<p class="error">${this.error}</p>` : null}
 
-        ${this.isAdmin && this.showAdminPanel
+        ${this.isAdmin && this.showAdminPanel && this.snapshot.season.status === 'active'
           ? html`
               <admin-panel
                 .players=${this.snapshot.players}
                 .matchList=${this.snapshot.matches}
+                .season=${this.snapshot.season}
                 .wrappedEnabled=${this.snapshot.config.wrappedEnabled}
                 .mutating=${this.mutating}
                 @logout-admin=${this.onLogoutAdmin}
@@ -262,8 +282,13 @@ export class MejengaApp extends LitElement {
                 @update-match=${this.onUpdateMatch}
                 @delete-match=${this.onDeleteMatch}
                 @toggle-wrapped=${this.onToggleWrapped}
+                @end-season=${this.onEndSeason}
               ></admin-panel>
             `
+          : null}
+
+        ${this.snapshot.history
+          ? html`<season-history .history=${this.snapshot.history}></season-history>`
           : null}
 
         <tab-nav .current=${this.currentTab} @tab-change=${this.onTabChange}></tab-nav>

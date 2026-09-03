@@ -1,13 +1,15 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { Match, Player } from '../types/models';
+import type { Match, Player, Season } from '../types/models';
 import './admin-player-manager';
 import './admin-match-manager';
+import './season-manager';
 
 @customElement('admin-panel')
 export class AdminPanel extends LitElement {
   @property({ attribute: false }) players: Player[] = [];
   @property({ attribute: false }) matchList: Match[] = [];
+  @property({ attribute: false }) season: Season | null = null;
   @property({ type: Boolean }) wrappedEnabled = false;
   @property({ type: Boolean }) mutating = false;
 
@@ -47,6 +49,8 @@ export class AdminPanel extends LitElement {
               Resumen publico habilitado
             </label>
           </article>
+
+          <season-manager .season=${this.season} .mutating=${this.mutating}></season-manager>
         </div>
 
         <admin-match-manager

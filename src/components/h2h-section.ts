@@ -11,10 +11,14 @@ export class H2HSection extends LitElement {
   @state() private p1 = '';
   @state() private p2 = '';
 
-  updated(changed: Map<string, unknown>): void {
-    if (changed.has('players') && this.players.length > 1 && (!this.p1 || !this.p2)) {
-      this.p1 = this.players[0]?.id ?? '';
-      this.p2 = this.players[1]?.id ?? this.players[0]?.id ?? '';
+  willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has('players') && this.players.length > 1) {
+      const firstId = this.players[0]?.id ?? '';
+      const secondId = this.players.find((player) => player.id !== firstId)?.id ?? firstId;
+      if (!this.players.some((player) => player.id === this.p1)) this.p1 = firstId;
+      if (!this.players.some((player) => player.id === this.p2) || this.p2 === this.p1) {
+        this.p2 = secondId;
+      }
     }
   }
 

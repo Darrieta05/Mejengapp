@@ -8,6 +8,7 @@ The old app remains as legacy reference in [legacy-index.html](legacy-index.html
 
 - Vite + Lit + TypeScript
 - Firebase (Firestore + Auth)
+- Firebase Cloud Functions for trusted season rollover
 - Chart.js for evolution chart
 - html2canvas for wrapped export
 
@@ -55,6 +56,12 @@ npm run check:lines
 npm run build
 ```
 
+- Cloud Functions build:
+
+```bash
+npm run build:functions
+```
+
 ## Deploy to GitHub Pages
 
 A workflow exists at [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml).
@@ -70,14 +77,21 @@ Required GitHub Secrets:
 
 Also enable Pages in repository settings and set source to GitHub Actions.
 
-## Firestore model (phase 1)
+## Firestore model
 
-Collections:
-
-- `players`
+- `leagues/{leagueId}`
+	- `activeSeasonId: string`
+	- `adminUids: string[]`
+- `leagues/{leagueId}/players/{playerId}`
 	- `nombre: string`
 	- `activo: boolean`
-- `matches`
+- `leagues/{leagueId}/seasons/{seasonId}`
+	- `name: string`
+	- `startedAt: string`
+	- `endedAt: string | null`
+	- `status: 'active' | 'ending' | 'ended'`
+	- `matchCount: number`
+- `leagues/{leagueId}/seasons/{seasonId}/matches/{matchId}`
 	- `nombre: string`
 	- `fechaISO: string` (YYYY-MM-DD)
 	- `team1PlayerIds: string[]`
@@ -85,11 +99,25 @@ Collections:
 	- `resultado: 'team1' | 'team2' | 'draw'`
 	- `mvpPlayerId: string | null`
 	- `asistencia: number`
+- `leagues/{leagueId}/history/{seasonId}`
+	- Immutable final standings and season totals written by the `endSeason` callable.
 - `config/global`
 	- `wrappedEnabled: boolean`
-	- `seasonLabel: string`
 
 Security rules scaffold exists in [firestore.rules](firestore.rules).
+
+To migrate the legacy top-level collections into the original league and its first active season, run the migration once with Firebase Admin credentials:
+
+```bash
+node scripts/migrate-to-default-league.mjs
+```
+
+Deploy the rules and trusted rollover function with the Firebase CLI:
+
+```bash
+npm run build:functions
+firebase deploy --only firestore:rules,functions
+```
 
 ## Current implementation status
 
@@ -106,10 +134,4 @@ Implemented now:
 - GitHub Pages deploy workflow
 - 400-line guard script
 
-Pending next phases:
-
-- Admin auth UI and role checks in frontend flow
-- Player profile modal
-- Wrapped modal and export action
-- Match/player CRUD forms wired to Firestore writes
-- Data migration script from legacy format
+Season rollover, season switching, historical summaries, active-season match CRUD, and the legacy data migration are implemented. Player profiles and Wrapped remain separate future work.

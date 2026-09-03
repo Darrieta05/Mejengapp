@@ -27,12 +27,13 @@ export class AppHeader extends LitElement {
     return html`
       <header>
         <div class="title-block">
-          <h1>Mejengas Martes</h1>
+          <h1>Mejengapp</h1>
           <p>${this.seasonLabel}</p>
         </div>
         <div class="status-block">
           <span class="leader">${this.leaderLabel}</span>
           <slot name="league-switcher"></slot>
+          <slot name="season-switcher"></slot>
           ${this.userEmail ? html`<span class="user">${this.userEmail}</span>` : null}
           ${this.adminMode ? html`<button @click=${this.onAdminToggle}>Panel admin</button>` : null}
           <button class="logout" @click=${this.onLogout}>Salir</button>
