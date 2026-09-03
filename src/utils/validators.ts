@@ -1,4 +1,5 @@
 import type { CreateMatchInput } from '../types/actions';
+import { normalizeLeagueCode } from './league-code';
 
 export function normalizePlayerName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
@@ -9,6 +10,23 @@ export function validatePlayerName(name: string): string | null {
   if (!normalized) return 'El nombre del jugador es requerido.';
   if (normalized.length < 2) return 'El nombre debe tener al menos 2 caracteres.';
   if (normalized.length > 40) return 'El nombre no debe exceder 40 caracteres.';
+  return null;
+}
+
+export function validateLeagueName(name: string): string | null {
+  const normalized = name.trim().replace(/\s+/g, ' ');
+  if (!normalized) return 'El nombre de la liga es requerido.';
+  if (normalized.length < 2) return 'El nombre debe tener al menos 2 caracteres.';
+  if (normalized.length > 60) return 'El nombre no debe exceder 60 caracteres.';
+  return null;
+}
+
+export function validateLeagueCode(code: string): string | null {
+  const normalized = normalizeLeagueCode(code);
+  if (!normalized) return 'El codigo de la liga es requerido.';
+  if (!/^[A-HJ-NP-Z2-9]{6}$/.test(normalized)) {
+    return 'El codigo debe tener 6 letras o numeros.';
+  }
   return null;
 }
 

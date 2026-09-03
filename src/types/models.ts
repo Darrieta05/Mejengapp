@@ -1,5 +1,37 @@
 export type MatchResult = 'team1' | 'team2' | 'draw';
 
+export type LeagueMemberRole = 'admin' | 'member';
+
+export interface League {
+  id: string;
+  name: string;
+  code: string;
+  createdBy: string;
+  createdAt: string;
+  adminUids: string[];
+}
+
+export interface LeagueMembership {
+  uid: string;
+  leagueId: string;
+  role: LeagueMemberRole;
+  joinCode: string;
+  joinedAt: string;
+}
+
+export interface UserLeague {
+  league: League;
+  membership: LeagueMembership;
+}
+
+export interface CreateLeagueInput {
+  name: string;
+}
+
+export interface JoinLeagueInput {
+  code: string;
+}
+
 export interface Player {
   id: string;
   nombre: string;

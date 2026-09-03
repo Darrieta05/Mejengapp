@@ -38,7 +38,7 @@ export function subscribeAuthChanges(
   });
 }
 
-export async function signInAdmin(): Promise<AdminSession> {
+export async function signInWithGoogle(): Promise<AdminSession> {
   if (!isFirebaseConfigured()) {
     return {
       uid: 'demo-admin',
@@ -53,6 +53,8 @@ export async function signInAdmin(): Promise<AdminSession> {
   const result = await signInWithPopup(auth, provider);
   return toAdminSession(result.user);
 }
+
+export const signInAdmin = signInWithGoogle;
 
 export async function signOutAdmin(): Promise<void> {
   if (!isFirebaseConfigured()) return;

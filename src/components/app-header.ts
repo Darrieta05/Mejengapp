@@ -12,8 +12,15 @@ export class AppHeader extends LitElement {
   @property({ type: Boolean })
   adminMode = false;
 
+  @property({ type: String })
+  userEmail = '';
+
   private onAdminToggle(): void {
     this.dispatchEvent(new CustomEvent('toggle-admin', { bubbles: true, composed: true }));
+  }
+
+  private onLogout(): void {
+    this.dispatchEvent(new CustomEvent('logout', { bubbles: true, composed: true }));
   }
 
   render() {
@@ -25,9 +32,10 @@ export class AppHeader extends LitElement {
         </div>
         <div class="status-block">
           <span class="leader">${this.leaderLabel}</span>
-          <button @click=${this.onAdminToggle}>
-            ${this.adminMode ? 'Admin activo' : 'Admin'}
-          </button>
+          <slot name="league-switcher"></slot>
+          ${this.userEmail ? html`<span class="user">${this.userEmail}</span>` : null}
+          ${this.adminMode ? html`<button @click=${this.onAdminToggle}>Panel admin</button>` : null}
+          <button class="logout" @click=${this.onLogout}>Salir</button>
         </div>
       </header>
     `;
@@ -79,6 +87,15 @@ export class AppHeader extends LitElement {
       font-weight: 700;
     }
 
+    .user {
+      max-width: 180px;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     button {
       border: 1px solid var(--surface-border);
       background: rgba(255, 255, 255, 0.06);
@@ -87,6 +104,10 @@ export class AppHeader extends LitElement {
       padding: 0.45rem 0.85rem;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    button.logout {
+      color: var(--text-muted);
     }
 
     @media (max-width: 760px) {
