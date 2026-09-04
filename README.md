@@ -79,6 +79,10 @@ Also enable Pages in repository settings and set source to GitHub Actions.
 
 ## Firestore model
 
+- `users/{uid}`
+	- `uid: string`
+	- `email: string | null`
+	- `role: 'player'`
 - `leagues/{leagueId}`
 	- `activeSeasonId: string`
 	- `adminUids: string[]`
@@ -103,6 +107,11 @@ Also enable Pages in repository settings and set source to GitHub Actions.
 	- Immutable final standings and season totals written by the `endSeason` callable.
 - `config/global`
 	- `wrappedEnabled: boolean`
+- `memberships/{uid}_{leagueId}`
+	- `uid: string`
+	- `leagueId: string`
+	- `role: 'player' | 'admin'`
+	- `joinCode: string`
 
 Security rules scaffold exists in [firestore.rules](firestore.rules).
 

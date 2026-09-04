@@ -120,7 +120,7 @@ export function mapMembership(id: string, raw: Record<string, unknown>): LeagueM
   return {
     uid: String(raw.uid ?? id.split('_')[0]),
     leagueId: String(raw.leagueId ?? ''),
-    role: raw.role === 'admin' ? 'admin' : 'member',
+    role: raw.role === 'admin' ? 'admin' : 'player',
     joinCode: String(raw.joinCode ?? ''),
     joinedAt: String(raw.joinedAt ?? '')
   };
