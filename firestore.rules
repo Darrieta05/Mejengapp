@@ -95,7 +95,7 @@ service cloud.firestore {
 
     match /memberships/{membershipId} {
       allow read: if isSignedIn() &&
-        (membershipId.startsWith(request.auth.uid + '_') ||
+        (membershipId.matches('^' + request.auth.uid + '_.*') ||
           resource.data.uid == request.auth.uid ||
           isLeagueAdmin(resource.data.leagueId));
       allow create: if isSignedIn() &&
@@ -114,13 +114,16 @@ service cloud.firestore {
       allow read: if isSignedIn() && userId == request.auth.uid;
       allow create: if isSignedIn() &&
         userId == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['uid', 'email', 'role']) &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.role == 'player';
       allow update: if isSignedIn() &&
         userId == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['uid', 'email', 'role']) &&
         request.resource.data.uid == resource.data.uid &&
         request.resource.data.role == resource.data.role &&
-        request.resource.data.role == 'player';
+        request.resource.data.role == 'player' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email']);
       allow delete: if false;
     }
 

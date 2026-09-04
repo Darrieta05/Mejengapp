@@ -72,7 +72,7 @@ async function toAdminSession(user: User): Promise<AdminSession> {
       role: 'player'
     },
     { merge: true }
-  );
+  ).catch(() => undefined);
   const adminRef = doc(db, 'admins', user.uid);
   const adminSnap = await getDoc(adminRef);
 
