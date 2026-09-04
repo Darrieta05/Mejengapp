@@ -1,6 +1,6 @@
 export type MatchResult = 'team1' | 'team2' | 'draw';
 
-export type LeagueMemberRole = 'admin' | 'member';
+export type LeagueMemberRole = 'admin' | 'player';
 
 export interface League {
   id: string;

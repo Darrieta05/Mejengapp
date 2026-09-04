@@ -5,7 +5,7 @@ import {
   signOut,
   type User
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { AdminSession } from '../types/auth';
 import { getFirebaseServices, isFirebaseConfigured } from './firebase';
 
@@ -64,6 +64,15 @@ export async function signOutAdmin(): Promise<void> {
 
 async function toAdminSession(user: User): Promise<AdminSession> {
   const { db } = getFirebaseServices();
+  await setDoc(
+    doc(db, 'users', user.uid),
+    {
+      uid: user.uid,
+      email: user.email,
+      role: 'player'
+    },
+    { merge: true }
+  ).catch(() => undefined);
   const adminRef = doc(db, 'admins', user.uid);
   const adminSnap = await getDoc(adminRef);
 

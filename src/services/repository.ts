@@ -197,7 +197,7 @@ export async function joinLeagueByCode(code: string, uid: string): Promise<UserL
     const membership: LeagueMembership = {
       uid,
       leagueId: league.id,
-      role: 'member',
+      role: 'player',
       joinCode: normalizedCode,
       joinedAt: new Date().toISOString()
     };
@@ -222,7 +222,7 @@ export async function joinLeagueByCode(code: string, uid: string): Promise<UserL
     const membership: LeagueMembership = {
       uid,
       leagueId,
-      role: 'member',
+      role: 'player',
       joinCode: normalizedCode,
       joinedAt: new Date().toISOString()
     };
