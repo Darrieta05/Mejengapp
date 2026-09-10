@@ -58,7 +58,7 @@ export class AdminPanel extends LitElement {
           ></admin-player-manager>
 
           <article>
-            <h3>Configuracion de liga</h3>
+            <h3>Configuración de liga</h3>
             <label class="toggle">
               <input type="checkbox" .checked=${this.wrappedEnabled} @change=${this.onToggleWrapped} />
               Resumen publico habilitado
