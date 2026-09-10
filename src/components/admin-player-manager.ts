@@ -26,7 +26,7 @@ export class AdminPlayerManager extends LitElement {
       `Ingresa directamente aquí: ${appUrl}\n\n` +
       `¡Nos vemos en la cancha!`
     );
-    return `mailto:${player.email}?subject=${subject}&body=${body}`;
+    return `mailto:${encodeURIComponent(player.email ?? '')}?subject=${subject}&body=${body}`;
   }
 
   private onCreatePlayer(): void {
