@@ -87,6 +87,7 @@ class AppStore extends EventTarget {
     this.patch({ mutating: true, error: null });
     try {
       await signOutAdmin();
+      await this.applySession(null);
     } catch (error) {
       this.patch({
         mutating: false,
