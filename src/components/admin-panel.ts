@@ -73,6 +73,7 @@ export class AdminPanel extends LitElement {
                       class="color-btn ${this.leagueColor === c ? 'selected' : ''}"
                       style="background: ${c};"
                       title="Seleccionar color ${c}"
+                      ?disabled=${this.mutating}
                       @click=${() => this.onSelectColor(c)}
                     ></button>
                   `
