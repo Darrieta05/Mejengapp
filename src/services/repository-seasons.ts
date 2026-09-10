@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import type { EndSeasonResult, Season } from '../types/models';
+import type { EndSeasonResult, Season, SeasonHistory } from '../types/models';
 import { buildSeasonHistory } from '../utils/calculations';
 import { getFirebaseServices, isFirebaseConfigured } from './firebase';
 import {
@@ -8,6 +8,7 @@ import {
   localLeagues,
   localSeasonOperations,
   localSeasons,
+  mapHistory,
   mapSeason,
   setLocalSnapshot
 } from './repository-support';
@@ -26,6 +27,24 @@ export async function getSeasons(leagueId: string): Promise<Season[]> {
     query(collection(db, 'leagues', leagueId, 'seasons'), orderBy('startedAt', 'desc'))
   );
   return snapshot.docs.map((item) => mapSeason(item.id, item.data() as Record<string, unknown>));
+}
+
+export async function getSeasonHistories(leagueId: string): Promise<SeasonHistory[]> {
+  if (!isFirebaseConfigured()) {
+    const seasons = localSeasons.get(leagueId) ?? [];
+    const histories: SeasonHistory[] = [];
+    for (const s of seasons) {
+      const snap = getLocalSnapshot(leagueId, s.id);
+      if (snap?.history) {
+        histories.push(snap.history);
+      }
+    }
+    return histories;
+  }
+
+  const { db } = getFirebaseServices();
+  const snapshot = await getDocs(collection(db, 'leagues', leagueId, 'history'));
+  return snapshot.docs.map((item) => mapHistory(item.id, item.data() as Record<string, unknown>));
 }
 
 export async function endSeason(

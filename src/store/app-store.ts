@@ -10,6 +10,7 @@ import {
   joinLeagueByCode,
   endSeason as endSeasonRecord,
   getSeasons,
+  getSeasonHistories,
   updateMatch,
   updatePlayer,
   setWrappedEnabled,
@@ -17,7 +18,7 @@ import {
 } from '../services/repository';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
 import type { AdminSession } from '../types/auth';
-import type { AppSnapshot, Season, UserLeague } from '../types/models';
+import type { AppSnapshot, Season, SeasonHistory, UserLeague } from '../types/models';
 
 export interface AppStoreState {
   loading: boolean;
@@ -27,6 +28,7 @@ export interface AppStoreState {
   memberships: UserLeague[];
   currentLeagueId: string | null;
   seasons: Season[];
+  histories: SeasonHistory[];
   currentSeasonId: string | null;
   isLeagueAdmin: boolean;
   mutating: boolean;
@@ -44,6 +46,7 @@ class AppStore extends EventTarget {
     memberships: [],
     currentLeagueId: null,
     seasons: [],
+    histories: [],
     currentSeasonId: null,
     isLeagueAdmin: false,
     mutating: false
@@ -71,8 +74,7 @@ class AppStore extends EventTarget {
   async login(): Promise<void> {
     this.patch({ error: null, loading: true });
     try {
-      const session = await signInWithGoogle();
-      await this.applySession(session);
+      await signInWithGoogle();
     } catch (error) {
       this.patch({
         loading: false,
@@ -82,10 +84,9 @@ class AppStore extends EventTarget {
   }
 
   async logout(): Promise<void> {
-    this.patch({ error: null, mutating: true });
+    this.patch({ mutating: true, error: null });
     try {
       await signOutAdmin();
-      await this.applySession(null);
     } catch (error) {
       this.patch({
         mutating: false,
@@ -96,52 +97,41 @@ class AppStore extends EventTarget {
 
   async createLeague(name: string, themeColor?: string): Promise<void> {
     const uid = this.state.session?.uid;
-    if (!uid) return this.patch({ error: 'Debes iniciar sesion para crear una liga.' });
-    await this.runLeagueSetup(() => createLeagueRecord(name, uid, themeColor));
-  }
-
-  async updateLeagueColor(themeColor: string): Promise<void> {
-    const leagueId = this.state.currentLeagueId;
-    if (!leagueId) return;
-    this.patch({ mutating: true, error: null });
-    try {
-      await updateLeagueColor(leagueId, themeColor);
-      const memberships = this.state.memberships.map((m) =>
-        m.league.id === leagueId
-          ? { ...m, league: { ...m.league, themeColor } }
-          : m
-      );
-      this.patch({ memberships, mutating: false });
-    } catch (error) {
-      this.patch({
-        mutating: false,
-        error: error instanceof Error ? error.message : 'No se pudo actualizar el color.'
-      });
+    if (!uid) {
+      this.patch({ error: 'Debes iniciar sesion para crear una liga.' });
+      return;
     }
+    await this.runLeagueSetup(() => createLeagueRecord(name, uid, themeColor));
   }
 
   async joinLeague(code: string): Promise<void> {
     const uid = this.state.session?.uid;
-    if (!uid) return this.patch({ error: 'Debes iniciar sesion para unirte a una liga.' });
+    if (!uid) {
+      this.patch({ error: 'Debes iniciar sesion para unirte a una liga.' });
+      return;
+    }
     await this.runLeagueSetup(() => joinLeagueByCode(code, uid));
   }
 
-  async switchLeague(leagueId: string): Promise<void> {
-    const selected = this.state.memberships.find((item) => item.league.id === leagueId);
-    if (!selected) {
-      this.patch({ error: 'No perteneces a esa liga.' });
-      return;
-    }
+  async selectLeague(leagueId: string): Promise<void> {
     await this.activateLeague(leagueId, this.state.memberships);
   }
 
-  async switchSeason(seasonId: string): Promise<void> {
+  async switchLeague(leagueId: string): Promise<void> {
+    await this.selectLeague(leagueId);
+  }
+
+  async selectSeason(seasonId: string): Promise<void> {
     const leagueId = this.state.currentLeagueId;
-    if (!leagueId || !this.state.seasons.some((season) => season.id === seasonId)) {
-      this.patch({ error: 'La temporada no esta disponible.' });
+    if (!leagueId) {
+      this.patch({ error: 'Selecciona una liga para continuar.' });
       return;
     }
     await this.activateSeason(leagueId, seasonId, this.state.memberships, this.state.seasons);
+  }
+
+  async switchSeason(seasonId: string): Promise<void> {
+    await this.selectSeason(seasonId);
   }
 
   async endCurrentSeason(newSeasonName: string): Promise<void> {
@@ -154,11 +144,16 @@ class AppStore extends EventTarget {
     this.patch({ mutating: true, error: null });
     try {
       await endSeasonRecord(leagueId, newSeasonName, crypto.randomUUID());
-      const [memberships, seasons] = await Promise.all([getUserLeagues(uid), getSeasons(leagueId)]);
-      const snapshot = await getSnapshot(leagueId);
+      const [memberships, seasons, histories, snapshot] = await Promise.all([
+        getUserLeagues(uid),
+        getSeasons(leagueId),
+        getSeasonHistories(leagueId),
+        getSnapshot(leagueId)
+      ]);
       this.patch({
         memberships,
         seasons,
+        histories,
         currentSeasonId: snapshot.season.id,
         snapshot,
         currentLeagueId: leagueId,
@@ -218,6 +213,22 @@ class AppStore extends EventTarget {
     });
   }
 
+  async updateColor(color: string): Promise<void> {
+    await this.runMutation(async (leagueId) => {
+      await updateLeagueColor(leagueId, color);
+      const updatedMemberships = this.state.memberships.map((item) =>
+        item.league.id === leagueId
+          ? { ...item, league: { ...item.league, themeColor: color } }
+          : item
+      );
+      this.patch({ memberships: updatedMemberships });
+    });
+  }
+
+  async updateLeagueColor(color: string): Promise<void> {
+    await this.updateColor(color);
+  }
+
   private async runMutation(action: (leagueId: string, seasonId: string) => Promise<void>): Promise<void> {
     const leagueId = this.state.currentLeagueId;
     if (!leagueId) {
@@ -251,6 +262,7 @@ class AppStore extends EventTarget {
         memberships: [],
         currentLeagueId: null,
         seasons: [],
+        histories: [],
         currentSeasonId: null,
         isLeagueAdmin: false,
         snapshot: null,
@@ -265,6 +277,7 @@ class AppStore extends EventTarget {
       memberships: [],
       currentLeagueId: null,
       seasons: [],
+      histories: [],
       currentSeasonId: null,
       isLeagueAdmin: false,
       snapshot: null,
@@ -283,14 +296,18 @@ class AppStore extends EventTarget {
         return;
       }
 
-      const seasons = await getSeasons(selected.league.id);
-      const snapshot = await getSnapshot(selected.league.id);
+      const [seasons, histories, snapshot] = await Promise.all([
+        getSeasons(selected.league.id),
+        getSeasonHistories(selected.league.id),
+        getSnapshot(selected.league.id)
+      ]);
       if (requestId !== this.sessionRequestId) return;
       localStorage.setItem('mejenga:currentLeagueId', selected.league.id);
       this.patch({
         memberships,
         currentLeagueId: selected.league.id,
         seasons,
+        histories,
         currentSeasonId: snapshot.season.id,
         isLeagueAdmin: session.isAdmin || selected.membership.role === 'admin',
         snapshot,
@@ -337,10 +354,13 @@ class AppStore extends EventTarget {
       isLeagueAdmin
     });
     try {
-      const seasons = await getSeasons(leagueId);
-      const snapshot = await getSnapshot(leagueId);
+      const [seasons, histories, snapshot] = await Promise.all([
+        getSeasons(leagueId),
+        getSeasonHistories(leagueId),
+        getSnapshot(leagueId)
+      ]);
       localStorage.setItem('mejenga:currentLeagueId', leagueId);
-      this.patch({ snapshot, seasons, currentSeasonId: snapshot.season.id, loading: false });
+      this.patch({ snapshot, seasons, histories, currentSeasonId: snapshot.season.id, loading: false });
     } catch (error) {
       this.patch({
         loading: false,

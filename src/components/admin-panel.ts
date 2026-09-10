@@ -73,6 +73,8 @@ export class AdminPanel extends LitElement {
                       class="color-btn ${this.leagueColor === c ? 'selected' : ''}"
                       style="background: ${c};"
                       title="Seleccionar color ${c}"
+                      aria-label="Seleccionar color ${c}"
+                      aria-pressed=${this.leagueColor === c ? 'true' : 'false'}
                       ?disabled=${this.mutating}
                       @click=${() => this.onSelectColor(c)}
                     ></button>

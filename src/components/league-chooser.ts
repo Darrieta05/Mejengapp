@@ -137,7 +137,8 @@ export class LeagueChooser extends LitElement {
                 class="color-dot ${this.selectedColor === c ? 'selected' : ''}"
                 style="background: ${c};"
                 aria-label="Seleccionar color ${c}"
-                aria-pressed=${this.selectedColor === c}
+                aria-pressed=${this.selectedColor === c ? 'true' : 'false'}
+                title="Color ${c}"
                 @click=${() => (this.selectedColor = c)}
               ></button>
             `

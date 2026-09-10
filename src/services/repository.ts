@@ -42,7 +42,7 @@ export {
   setWrappedEnabled,
   updateLeagueColor
 } from './repository-mutations';
-export { endSeason, getSeasons } from './repository-seasons';
+export { endSeason, getSeasons, getSeasonHistories } from './repository-seasons';
 
 class LeagueCodeCollisionError extends Error {}
 

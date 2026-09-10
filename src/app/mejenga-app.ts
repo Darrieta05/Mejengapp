@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/app-store';
-import { buildStandings } from '../utils/calculations';
+import { aggregatePlayerHistoricalStats, buildStandings } from '../utils/calculations';
 import {
   normalizePlayerEmail,
   normalizePlayerName,
@@ -13,7 +13,7 @@ import {
 } from '../utils/validators';
 import { normalizeLeagueCode } from '../utils/league-code';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
-import type { AppSnapshot, Season, UserLeague } from '../types/models';
+import type { AppSnapshot, Season, SeasonHistory, UserLeague } from '../types/models';
 import type { AppTab } from '../components/tab-nav';
 import '../components/app-header';
 import '../components/admin-panel';
@@ -43,6 +43,7 @@ export class MejengaApp extends LitElement {
   @state() private memberships: UserLeague[] = [];
   @state() private currentLeagueId: string | null = null;
   @state() private seasons: Season[] = [];
+  @state() private histories: SeasonHistory[] = [];
   @state() private showLeagueChooser = false;
   @state() private selectedPlayerProfileId: string | null = null;
 
@@ -69,6 +70,7 @@ export class MejengaApp extends LitElement {
     this.memberships = state.memberships;
     this.currentLeagueId = state.currentLeagueId;
     this.seasons = state.seasons;
+    this.histories = state.histories;
     this.mutating = state.mutating;
 
     if (!this.isAdmin) {
@@ -163,11 +165,9 @@ export class MejengaApp extends LitElement {
   private async onCreatePlayer(event: CustomEvent<{ nombre: string; email?: string | null }>): Promise<void> {
     if (!this.isAdmin) return;
     const nombre = normalizePlayerName(event.detail.nombre);
-    const nameError = validatePlayerName(nombre);
-    if (nameError) return void (this.error = nameError);
     const email = normalizePlayerEmail(event.detail.email);
-    const emailError = validatePlayerEmail(email);
-    if (emailError) return void (this.error = emailError);
+    const err = validatePlayerName(nombre) || validatePlayerEmail(email);
+    if (err) return void (this.error = err);
     await appStore.addPlayer(nombre, email);
   }
 
@@ -193,13 +193,11 @@ export class MejengaApp extends LitElement {
   }
 
   private async onToggleWrapped(event: CustomEvent<{ enabled: boolean }>): Promise<void> {
-    if (!this.isAdmin) return;
-    await appStore.updateWrapped(event.detail.enabled);
+    if (this.isAdmin) await appStore.updateWrapped(event.detail.enabled);
   }
 
   private async onDeleteMatch(event: CustomEvent<{ matchId: string }>): Promise<void> {
-    if (!this.isAdmin) return;
-    await appStore.removeMatch(event.detail.matchId);
+    if (this.isAdmin) await appStore.removeMatch(event.detail.matchId);
   }
 
   private async onUpdateMatch(event: CustomEvent<UpdateMatchInput>): Promise<void> {
@@ -318,8 +316,13 @@ export class MejengaApp extends LitElement {
     if (!this.selectedPlayerProfileId || !this.snapshot) return null;
     const player = this.snapshot.players.find((p) => p.id === this.selectedPlayerProfileId);
     if (!player) return null;
-    const standings = buildStandings(this.snapshot.players, this.snapshot.matches);
-    const standing = standings.find((s) => s.playerId === player.id) ?? null;
+
+    const standing = aggregatePlayerHistoricalStats(
+      player,
+      this.snapshot.matches,
+      this.snapshot.players,
+      this.histories
+    );
 
     return html`
       <player-profile-dialog

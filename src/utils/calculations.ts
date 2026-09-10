@@ -72,6 +72,49 @@ export function buildSeasonHistory(
   };
 }
 
+export function aggregatePlayerHistoricalStats(
+  player: Player,
+  currentMatches: Match[],
+  allPlayers: Player[],
+  histories: SeasonHistory[]
+): StandingRow {
+  const currentStandings = buildStandings(allPlayers, currentMatches);
+  const currentStanding = currentStandings.find((s) => s.playerId === player.id);
+
+  let pj = currentStanding?.pj ?? 0;
+  let g = currentStanding?.g ?? 0;
+  let e = currentStanding?.e ?? 0;
+  let p = currentStanding?.p ?? 0;
+  let puntos = currentStanding?.puntos ?? 0;
+  let mvp = currentStanding?.mvp ?? 0;
+
+  for (const h of histories) {
+    const pastStanding = h.finalStandings?.find((s) => s.playerId === player.id);
+    if (pastStanding) {
+      pj += pastStanding.pj ?? 0;
+      g += pastStanding.g ?? 0;
+      e += pastStanding.e ?? 0;
+      p += pastStanding.p ?? 0;
+      puntos += pastStanding.puntos ?? 0;
+      mvp += pastStanding.mvp ?? 0;
+    }
+  }
+
+  const efectividad = pj > 0 ? Math.round(((g * 3 + e) / (pj * 3)) * 100) : 0;
+  return {
+    playerId: player.id,
+    nombre: player.nombre,
+    email: player.email,
+    pj,
+    g,
+    e,
+    p,
+    puntos,
+    efectividad,
+    mvp
+  };
+}
+
 export function calculateH2H(player1Id: string, player2Id: string, matches: Match[]): H2HStats {
   const stats: H2HStats = {
     together: { pj: 0, g: 0, e: 0, p: 0 },

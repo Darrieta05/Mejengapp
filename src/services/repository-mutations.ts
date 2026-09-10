@@ -63,24 +63,31 @@ export async function updatePlayer(
   playerId: string,
   data: { nombre: string; email?: string | null }
 ): Promise<void> {
-  const email = data.email?.trim().toLowerCase() || null;
+  const emailDefined = Object.prototype.hasOwnProperty.call(data, 'email');
+  const normalizedEmail = emailDefined ? (data.email?.trim().toLowerCase() || null) : undefined;
+
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     localSnapshots.set(`${leagueId}:${snapshot.season.id}`, {
       ...snapshot,
       players: snapshot.players.map((player) =>
-        player.id === playerId ? { ...player, nombre: data.nombre, email } : player
+        player.id === playerId
+          ? { ...player, nombre: data.nombre, ...(emailDefined ? { email: normalizedEmail } : {}) }
+          : player
       )
     });
     return;
   }
 
   const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), {
-    nombre: data.nombre,
-    email
-  });
+  const updatePayload: { nombre: string; email?: string | null } = {
+    nombre: data.nombre
+  };
+  if (emailDefined) {
+    updatePayload.email = normalizedEmail;
+  }
+  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), updatePayload);
 }
 
 export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
