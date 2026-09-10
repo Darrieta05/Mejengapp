@@ -239,7 +239,11 @@ export async function joinLeagueByCode(code: string, uid: string): Promise<UserL
   });
 }
 
-export async function getSnapshot(leagueId: string, seasonId?: string): Promise<AppSnapshot> {
+export async function getSnapshot(
+  leagueId: string,
+  seasonId?: string,
+  includePlayerContacts = false
+): Promise<AppSnapshot> {
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId, seasonId);
     if (!snapshot) throw new Error('No se encontro la liga.');
@@ -257,20 +261,38 @@ export async function getSnapshot(leagueId: string, seasonId?: string): Promise<
     collection(db, 'leagues', leagueId, 'seasons', selectedSeasonId, 'matches'),
     orderBy('fechaISO', 'asc')
   );
+  const playerContactsQ = query(collection(db, 'leagues', leagueId, 'playerContacts'));
   const seasonRef = doc(db, 'leagues', leagueId, 'seasons', selectedSeasonId);
   const historyRef = doc(db, 'leagues', leagueId, 'history', selectedSeasonId);
   const configRef = doc(db, 'leagues', leagueId, 'config', 'global');
 
-  const [playersSnap, matchesSnap, configSnap, seasonSnap, historySnap] = await Promise.all([
-    getDocs(playersQ),
-    getDocs(matchesQ),
-    getDoc(configRef),
-    getDoc(seasonRef),
-    getDoc(historyRef)
-  ]);
+  const [playersSnap, matchesSnap, configSnap, seasonSnap, historySnap, playerContactsSnap] =
+    await Promise.all([
+      getDocs(playersQ),
+      getDocs(matchesQ),
+      getDoc(configRef),
+      getDoc(seasonRef),
+      getDoc(historyRef),
+      includePlayerContacts ? getDocs(playerContactsQ) : Promise.resolve(null)
+    ]);
   if (!seasonSnap.exists()) throw new Error('No se encontro la temporada.');
 
-  const players = mapPlayers(playersSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  const playerContacts = new Map(
+    (playerContactsSnap?.docs ?? []).map((item) => [
+      item.id,
+      String((item.data() as Record<string, unknown>).email ?? '').trim().toLowerCase()
+    ])
+  );
+  const players = mapPlayers(
+    playersSnap.docs.map((d) => {
+      const { email: _ignoredEmail, ...playerData } = d.data() as Record<string, unknown>;
+      return {
+        id: d.id,
+        ...playerData,
+        ...(includePlayerContacts && playerContacts.has(d.id) ? { email: playerContacts.get(d.id) } : {})
+      };
+    })
+  );
   const matches = mapMatches(matchesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
   const configData = configSnap.exists()

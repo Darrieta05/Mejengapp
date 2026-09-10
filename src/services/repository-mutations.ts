@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -27,11 +26,14 @@ export async function createPlayer(leagueId: string, input: CreatePlayerInput): 
   }
 
   const { db } = getFirebaseServices();
-  await addDoc(collection(db, 'leagues', leagueId, 'players'), {
+  const playerRef = doc(collection(db, 'leagues', leagueId, 'players'));
+  await setDoc(playerRef, {
     nombre: input.nombre,
-    activo: true,
-    email
+    activo: true
   });
+  if (email) {
+    await setDoc(doc(db, 'leagues', leagueId, 'playerContacts', playerRef.id), { email });
+  }
 }
 
 export async function deletePlayer(leagueId: string, playerId: string): Promise<void> {
@@ -55,7 +57,10 @@ export async function deletePlayer(leagueId: string, playerId: string): Promise<
   }
 
   const { db } = getFirebaseServices();
-  await deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId));
+  await Promise.all([
+    deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId)),
+    deleteDoc(doc(db, 'leagues', leagueId, 'playerContacts', playerId))
+  ]);
 }
 
 export async function updatePlayer(
@@ -81,13 +86,15 @@ export async function updatePlayer(
   }
 
   const { db } = getFirebaseServices();
-  const updatePayload: { nombre: string; email?: string | null } = {
-    nombre: data.nombre
-  };
-  if (emailDefined) {
-    updatePayload.email = normalizedEmail;
+  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), { nombre: data.nombre });
+  if (!emailDefined) return;
+
+  const contactRef = doc(db, 'leagues', leagueId, 'playerContacts', playerId);
+  if (normalizedEmail) {
+    await setDoc(contactRef, { email: normalizedEmail });
+    return;
   }
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), updatePayload);
+  await deleteDoc(contactRef);
 }
 
 export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {

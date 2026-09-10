@@ -144,7 +144,7 @@ class AppStore extends EventTarget {
         getUserLeagues(uid),
         getSeasons(leagueId),
         getSeasonHistories(leagueId),
-        getSnapshot(leagueId)
+        getSnapshot(leagueId, undefined, this.state.isLeagueAdmin)
       ]);
       this.patch({
         memberships,
@@ -299,7 +299,7 @@ class AppStore extends EventTarget {
       const [seasons, histories, snapshot] = await Promise.all([
         getSeasons(selected.league.id),
         getSeasonHistories(selected.league.id),
-        getSnapshot(selected.league.id)
+        getSnapshot(selected.league.id, undefined, session.isAdmin || selected.membership.role === 'admin')
       ]);
       if (requestId !== this.sessionRequestId) return;
       localStorage.setItem('mejenga:currentLeagueId', selected.league.id);
@@ -357,7 +357,7 @@ class AppStore extends EventTarget {
       const [seasons, histories, snapshot] = await Promise.all([
         getSeasons(leagueId),
         getSeasonHistories(leagueId),
-        getSnapshot(leagueId)
+        getSnapshot(leagueId, undefined, isLeagueAdmin)
       ]);
       localStorage.setItem('mejenga:currentLeagueId', leagueId);
       this.patch({ snapshot, seasons, histories, currentSeasonId: snapshot.season.id, loading: false });
@@ -377,7 +377,7 @@ class AppStore extends EventTarget {
   ): Promise<void> {
     this.patch({ loading: true, error: null, snapshot: null, memberships, seasons, currentSeasonId: seasonId });
     try {
-      const snapshot = await getSnapshot(leagueId, seasonId);
+      const snapshot = await getSnapshot(leagueId, seasonId, this.state.isLeagueAdmin);
       this.patch({ snapshot, loading: false });
     } catch (error) {
       this.patch({
