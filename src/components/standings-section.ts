@@ -66,7 +66,7 @@ export class StandingsSection extends LitElement {
         <td>
           <button
             class="player-link"
-            title="Ver perfil y estadisticas de ${row.nombre}"
+            title="Ver perfil y estadísticas de ${row.nombre}"
             @click=${() => this.onSelectPlayer(row.playerId)}
           >
             ${row.nombre}
