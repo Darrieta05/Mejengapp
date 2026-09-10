@@ -1,17 +1,19 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { appStore } from '../store/app-store';
-import { buildStandings } from '../utils/calculations';
+import { aggregatePlayerHistoricalStats, buildStandings } from '../utils/calculations';
 import {
+  normalizePlayerEmail,
   normalizePlayerName,
   validateLeagueCode,
   validateLeagueName,
   validateMatchInput,
+  validatePlayerEmail,
   validatePlayerName
 } from '../utils/validators';
 import { normalizeLeagueCode } from '../utils/league-code';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
-import type { AppSnapshot, Season, UserLeague } from '../types/models';
+import type { AppSnapshot, Season, SeasonHistory, UserLeague } from '../types/models';
 import type { AppTab } from '../components/tab-nav';
 import '../components/app-header';
 import '../components/admin-panel';
@@ -21,6 +23,7 @@ import '../components/h2h-section';
 import '../components/evolution-section';
 import '../components/curios-section';
 import '../components/matches-section';
+import '../components/player-profile-dialog';
 import '../components/auth-gate';
 import '../components/league-chooser';
 import '../components/league-switcher';
@@ -40,7 +43,9 @@ export class MejengaApp extends LitElement {
   @state() private memberships: UserLeague[] = [];
   @state() private currentLeagueId: string | null = null;
   @state() private seasons: Season[] = [];
+  @state() private histories: SeasonHistory[] = [];
   @state() private showLeagueChooser = false;
+  @state() private selectedPlayerProfileId: string | null = null;
 
   private unsubscribe: (() => void) | null = null;
 
@@ -65,16 +70,20 @@ export class MejengaApp extends LitElement {
     this.memberships = state.memberships;
     this.currentLeagueId = state.currentLeagueId;
     this.seasons = state.seasons;
+    this.histories = state.histories;
     this.mutating = state.mutating;
 
     if (!this.isAdmin) {
       this.showAdminPanel = false;
     }
+
+    const currentLeague = this.memberships.find((m) => m.league.id === this.currentLeagueId)?.league;
+    const themeColor = currentLeague?.themeColor || '#0ea5e9';
+    document.documentElement.style.setProperty('--league-color', themeColor);
+    document.documentElement.style.setProperty('--league-color-glow', `${themeColor}40`);
   }
 
-  private onTabChange(event: CustomEvent<{ tab: AppTab }>): void {
-    this.currentTab = event.detail.tab;
-  }
+  private onTabChange(event: CustomEvent<{ tab: AppTab }>): void { this.currentTab = event.detail.tab; }
 
   private async onAdminToggle(): Promise<void> {
     if (!this.sessionEmail) {
@@ -90,27 +99,23 @@ export class MejengaApp extends LitElement {
     this.showAdminPanel = !this.showAdminPanel;
   }
 
-  private async onLogoutAdmin(): Promise<void> {
-    await appStore.logout();
-  }
+  private async onLogoutAdmin(): Promise<void> { await appStore.logout(); }
 
-  private async onSignIn(): Promise<void> {
-    await appStore.login();
-  }
+  private async onSignIn(): Promise<void> { await appStore.login(); }
 
   private async onLogout(): Promise<void> {
     this.showLeagueChooser = false;
     await appStore.logout();
   }
 
-  private async onCreateLeague(event: CustomEvent<{ name: string }>): Promise<void> {
+  private async onCreateLeague(event: CustomEvent<{ name: string; themeColor?: string }>): Promise<void> {
     const name = event.detail.name.trim().replace(/\s+/g, ' ');
     const validationError = validateLeagueName(name);
     if (validationError) {
       this.error = validationError;
       return;
     }
-    await appStore.createLeague(name);
+    await appStore.createLeague(name, event.detail.themeColor);
     if (appStore.getState().currentLeagueId) this.showLeagueChooser = false;
   }
 
@@ -127,15 +132,19 @@ export class MejengaApp extends LitElement {
 
   private async onLeagueChange(event: CustomEvent<{ leagueId: string }>): Promise<void> {
     await appStore.switchLeague(event.detail.leagueId);
+    if (appStore.getState().snapshot) {
+      this.showLeagueChooser = false;
+    }
   }
 
-  private async onSeasonChange(event: CustomEvent<{ seasonId: string }>): Promise<void> {
-    await appStore.switchSeason(event.detail.seasonId);
+  private async onChangeLeagueColor(event: CustomEvent<{ color: string }>): Promise<void> {
+    if (!this.isAdmin) return;
+    await appStore.updateLeagueColor(event.detail.color);
   }
 
-  private async onEndSeason(event: CustomEvent<{ name: string }>): Promise<void> {
-    await appStore.endCurrentSeason(event.detail.name);
-  }
+  private async onSeasonChange(event: CustomEvent<{ seasonId: string }>): Promise<void> { await appStore.switchSeason(event.detail.seasonId); }
+
+  private async onEndSeason(event: CustomEvent<{ name: string }>): Promise<void> { await appStore.endCurrentSeason(event.detail.name); }
 
   private openLeagueChooser(): void {
     this.showLeagueChooser = true;
@@ -145,15 +154,16 @@ export class MejengaApp extends LitElement {
     this.showLeagueChooser = false;
   }
 
-  private async onCreatePlayer(event: CustomEvent<{ nombre: string }>): Promise<void> {
+  private async onCreatePlayer(event: CustomEvent<{ nombre: string; email?: string | null; onSuccess?: () => void }>): Promise<void> {
     if (!this.isAdmin) return;
     const nombre = normalizePlayerName(event.detail.nombre);
-    const validationError = validatePlayerName(nombre);
-    if (validationError) {
-      this.error = validationError;
-      return;
+    const email = normalizePlayerEmail(event.detail.email);
+    const err = validatePlayerName(nombre) || validatePlayerEmail(email);
+    if (err) return void (this.error = err);
+    await appStore.addPlayer(nombre, email);
+    if (!appStore.getState().error && event.detail.onSuccess) {
+      event.detail.onSuccess();
     }
-    await appStore.addPlayer(nombre);
   }
 
   private async onDeletePlayer(event: CustomEvent<{ playerId: string }>): Promise<void> {
@@ -161,45 +171,51 @@ export class MejengaApp extends LitElement {
     await appStore.removePlayer(event.detail.playerId);
   }
 
-  private async onUpdatePlayer(event: CustomEvent<{ playerId: string; nombre: string }>): Promise<void> {
+  private async onUpdatePlayer(e: CustomEvent<{ playerId: string; nombre: string; email?: string | null }>): Promise<void> {
     if (!this.isAdmin) return;
-    const nombre = normalizePlayerName(event.detail.nombre);
-    const validationError = validatePlayerName(nombre);
-    if (validationError) {
-      this.error = validationError;
-      return;
-    }
-    await appStore.renamePlayer(event.detail.playerId, nombre);
+    const nombre = normalizePlayerName(e.detail.nombre);
+    const email = normalizePlayerEmail(e.detail.email);
+    const err = validatePlayerName(nombre) || validatePlayerEmail(email);
+    if (err) return void (this.error = err);
+    await appStore.updatePlayer(e.detail.playerId, nombre, email);
   }
 
   private async onCreateMatch(event: CustomEvent<CreateMatchInput>): Promise<void> {
     if (!this.isAdmin) return;
-    const validationError = validateMatchInput(event.detail);
-    if (validationError) {
-      this.error = validationError;
-      return;
-    }
+    const err = validateMatchInput(event.detail);
+    if (err) return void (this.error = err);
     await appStore.addMatch(event.detail);
   }
 
   private async onToggleWrapped(event: CustomEvent<{ enabled: boolean }>): Promise<void> {
-    if (!this.isAdmin) return;
-    await appStore.updateWrapped(event.detail.enabled);
+    if (this.isAdmin) await appStore.updateWrapped(event.detail.enabled);
   }
 
   private async onDeleteMatch(event: CustomEvent<{ matchId: string }>): Promise<void> {
-    if (!this.isAdmin) return;
-    await appStore.removeMatch(event.detail.matchId);
+    if (this.isAdmin) await appStore.removeMatch(event.detail.matchId);
   }
 
   private async onUpdateMatch(event: CustomEvent<UpdateMatchInput>): Promise<void> {
     if (!this.isAdmin) return;
-    const validationError = validateMatchInput(event.detail);
-    if (validationError) {
-      this.error = validationError;
-      return;
-    }
+    const err = validateMatchInput(event.detail);
+    if (err) return void (this.error = err);
     await appStore.editMatch(event.detail);
+  }
+
+  private renderLeagueChooser(canClose: boolean) {
+    return html`
+      <league-chooser
+        .memberships=${this.memberships}
+        .busy=${this.mutating}
+        .canClose=${canClose}
+        .error=${this.error ?? ''}
+        @create-league=${this.onCreateLeague}
+        @join-league=${this.onJoinLeague}
+        @league-change=${this.onLeagueChange}
+        @close-chooser=${this.closeLeagueChooser}
+        @logout=${this.onLogout}
+      ></league-chooser>
+    `;
   }
 
   render() {
@@ -207,34 +223,13 @@ export class MejengaApp extends LitElement {
     if (!this.sessionEmail) {
       return html`<auth-gate .busy=${this.loading} .error=${this.error ?? ''} @sign-in=${this.onSignIn}></auth-gate>`;
     }
-    if (this.memberships.length === 0) {
-      return html`
-        <league-chooser
-          .busy=${this.mutating}
-          .error=${this.error ?? ''}
-          @create-league=${this.onCreateLeague}
-          @join-league=${this.onJoinLeague}
-          @logout=${this.onLogout}
-        ></league-chooser>
-      `;
-    }
-    if (this.showLeagueChooser) {
-      return html`
-        <league-chooser
-          .busy=${this.mutating}
-          .canClose=${true}
-          .error=${this.error ?? ''}
-          @create-league=${this.onCreateLeague}
-          @join-league=${this.onJoinLeague}
-          @close-chooser=${this.closeLeagueChooser}
-          @logout=${this.onLogout}
-        ></league-chooser>
-      `;
-    }
+    if (this.memberships.length === 0) return this.renderLeagueChooser(false);
+    if (this.showLeagueChooser) return this.renderLeagueChooser(true);
     if (!this.snapshot) return html`<main><p>Sin datos</p></main>`;
 
     const standings = buildStandings(this.snapshot.players, this.snapshot.matches);
     const leader = standings[0];
+    const currentLeague = this.memberships.find((m) => m.league.id === this.currentLeagueId)?.league;
 
     return html`
       <main>
@@ -243,6 +238,7 @@ export class MejengaApp extends LitElement {
           .leaderLabel=${leader ? `Lider: ${leader.nombre} (${leader.puntos} pts)` : 'Sin lider'}
           .adminMode=${this.isAdmin}
           .userEmail=${this.sessionEmail}
+          @open-chooser=${this.openLeagueChooser}
           @toggle-admin=${this.onAdminToggle}
           @logout=${this.onLogout}
         >
@@ -269,11 +265,13 @@ export class MejengaApp extends LitElement {
         ${this.isAdmin && this.showAdminPanel && this.snapshot.season.status === 'active'
           ? html`
               <admin-panel
+                .league=${currentLeague ?? null}
                 .players=${this.snapshot.players}
                 .matchList=${this.snapshot.matches}
                 .season=${this.snapshot.season}
                 .wrappedEnabled=${this.snapshot.config.wrappedEnabled}
                 .mutating=${this.mutating}
+                .leagueColor=${currentLeague?.themeColor || '#0ea5e9'}
                 @logout-admin=${this.onLogoutAdmin}
                 @create-player=${this.onCreatePlayer}
                 @delete-player=${this.onDeletePlayer}
@@ -282,6 +280,7 @@ export class MejengaApp extends LitElement {
                 @update-match=${this.onUpdateMatch}
                 @delete-match=${this.onDeleteMatch}
                 @toggle-wrapped=${this.onToggleWrapped}
+                @change-league-color=${this.onChangeLeagueColor}
                 @end-season=${this.onEndSeason}
               ></admin-panel>
             `
@@ -294,7 +293,41 @@ export class MejengaApp extends LitElement {
         <tab-nav .current=${this.currentTab} @tab-change=${this.onTabChange}></tab-nav>
 
         ${this.renderActiveSection()}
+
+        ${this.renderPlayerProfileDialog()}
       </main>
+    `;
+  }
+
+  private onSelectPlayer(event: CustomEvent<{ playerId: string }>): void {
+    this.selectedPlayerProfileId = event.detail.playerId;
+  }
+
+  private closePlayerProfile(): void {
+    this.selectedPlayerProfileId = null;
+  }
+
+  private renderPlayerProfileDialog() {
+    if (!this.selectedPlayerProfileId || !this.snapshot) return null;
+    const player = this.snapshot.players.find((p) => p.id === this.selectedPlayerProfileId);
+    if (!player) return null;
+
+    const filteredHistories = this.histories.filter((h) => h.seasonId !== this.snapshot!.season.id);
+    const standing = aggregatePlayerHistoricalStats(
+      player,
+      this.snapshot.matches,
+      this.snapshot.players,
+      filteredHistories
+    );
+
+    return html`
+      <player-profile-dialog
+        .player=${player}
+        .standing=${standing}
+        .matchList=${this.snapshot.matches}
+        .allPlayers=${this.snapshot.players}
+        @close-profile=${this.closePlayerProfile}
+      ></player-profile-dialog>
     `;
   }
 
@@ -303,7 +336,13 @@ export class MejengaApp extends LitElement {
     if (!snapshot) return html``;
 
     if (this.currentTab === 'tabla') {
-      return html`<standings-section .players=${snapshot.players} .matchList=${snapshot.matches}></standings-section>`;
+      return html`
+        <standings-section
+          .players=${snapshot.players}
+          .matchList=${snapshot.matches}
+          @select-player=${this.onSelectPlayer}
+        ></standings-section>
+      `;
     }
     if (this.currentTab === 'h2h') {
       return html`<h2h-section .players=${snapshot.players} .matchList=${snapshot.matches}></h2h-section>`;
@@ -335,50 +374,21 @@ export class MejengaApp extends LitElement {
   }
 
   static styles = css`
-    :host {
-      display: block;
-      min-height: 100vh;
-      color: var(--text);
-    }
-
-    main {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 1rem;
-      display: grid;
-      gap: 0.8rem;
-    }
-
-    p {
-      margin: 0;
-      font-size: 0.95rem;
-    }
-
+    :host { display: block; min-height: 100vh; color: var(--text); }
+    main { max-width: 1100px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
+    p { margin: 0; font-size: 0.95rem; }
     .status {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      padding: 0.55rem 0.75rem;
-      border: 1px dashed var(--surface-border);
-      border-radius: 10px;
-      background: rgba(15, 23, 42, 0.35);
+      font-size: 0.82rem; color: var(--text-muted); padding: 0.55rem 0.75rem;
+      border: 1px dashed var(--surface-border); border-radius: 10px; background: rgba(15, 23, 42, 0.35);
     }
-
-    .status.ok {
-      color: #86efac;
-      border-color: rgba(134, 239, 172, 0.45);
-    }
-
-    .status.warning {
-      color: #facc15;
-      border-color: rgba(250, 204, 21, 0.45);
-    }
-
+    .status.ok { color: #86efac; border-color: rgba(134, 239, 172, 0.45); }
+    .status.warning { color: #facc15; border-color: rgba(250, 204, 21, 0.45); }
     .error {
-      color: #fecaca;
-      background: rgba(127, 29, 29, 0.35);
-      border: 1px solid rgba(248, 113, 113, 0.5);
-      border-radius: 10px;
-      padding: 0.8rem;
+      color: #fecaca; background: rgba(127, 29, 29, 0.35);
+      border: 1px solid rgba(248, 113, 113, 0.5); border-radius: 10px; padding: 0.8rem;
+    }
+    @media (min-width: 640px) {
+      main { padding: 1.2rem; }
     }
   `;
 }

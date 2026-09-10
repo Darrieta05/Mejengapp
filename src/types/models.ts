@@ -10,6 +10,7 @@ export interface League {
   createdAt: string;
   adminUids: string[];
   activeSeasonId: string;
+  themeColor?: string;
 }
 
 export type SeasonStatus = 'active' | 'ending' | 'ended';
@@ -66,6 +67,7 @@ export interface Player {
   id: string;
   nombre: string;
   activo: boolean;
+  email?: string | null;
 }
 
 export interface Match {
@@ -95,6 +97,7 @@ export interface AppSnapshot {
 export interface StandingRow {
   playerId: string;
   nombre: string;
+  email?: string | null;
   pj: number;
   g: number;
   e: number;

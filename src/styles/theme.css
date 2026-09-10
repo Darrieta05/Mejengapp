@@ -7,6 +7,8 @@
   --surface-border: rgba(148, 163, 184, 0.24);
   --text: #e5e7eb;
   --text-muted: #94a3b8;
+  --league-color: #0ea5e9;
+  --league-color-glow: rgba(14, 165, 233, 0.25);
 
   font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
   color: var(--text);

@@ -49,11 +49,30 @@ export class StandingsSection extends LitElement {
     `;
   }
 
+  private onSelectPlayer(playerId: string): void {
+    this.dispatchEvent(
+      new CustomEvent('select-player', {
+        detail: { playerId },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   private renderRow(row: StandingRow, position: number) {
     return html`
       <tr>
         <td>${position}</td>
-        <td>${row.nombre}</td>
+        <td>
+          <button
+            class="player-link"
+            title="Ver perfil y estadísticas de ${row.nombre}"
+            @click=${() => this.onSelectPlayer(row.playerId)}
+          >
+            ${row.nombre}
+            ${row.email ? html`<span class="email-indicator" title="Usuario registrado">●</span>` : null}
+          </button>
+        </td>
         <td>${row.pj}</td>
         <td>${row.g}</td>
         <td>${row.e}</td>
@@ -124,6 +143,34 @@ export class StandingsSection extends LitElement {
     .points {
       font-weight: 800;
       color: #86efac;
+    }
+
+    .player-link {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #38bdf8;
+      font-size: 0.86rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: rgba(56, 189, 248, 0.4);
+      transition: all 0.15s ease;
+    }
+
+    .player-link:hover {
+      color: #7dd3fc;
+      text-decoration-color: #7dd3fc;
+    }
+
+    .email-indicator {
+      font-size: 0.6rem;
+      color: #34d399;
+      line-height: 1;
     }
 
     @media (max-width: 740px) {

@@ -1,7 +1,6 @@
 import {
-  addDoc,
+  writeBatch,
   collection,
-  deleteDoc,
   doc,
   runTransaction,
   setDoc,
@@ -12,21 +11,31 @@ import { getFirebaseServices, isFirebaseConfigured } from './firebase';
 import { getLocalSnapshot, localLeagues, localSnapshots } from './repository-support';
 
 export async function createPlayer(leagueId: string, input: CreatePlayerInput): Promise<void> {
+  const email = input.email?.trim().toLowerCase() || null;
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     localSnapshots.set(`${leagueId}:${snapshot.season.id}`, {
       ...snapshot,
-      players: [...snapshot.players, { id: crypto.randomUUID(), nombre: input.nombre, activo: true }]
+      players: [
+        ...snapshot.players,
+        { id: crypto.randomUUID(), nombre: input.nombre, activo: true, email }
+      ]
     });
     return;
   }
 
   const { db } = getFirebaseServices();
-  await addDoc(collection(db, 'leagues', leagueId, 'players'), {
+  const playerRef = doc(collection(db, 'leagues', leagueId, 'players'));
+  const batch = writeBatch(db);
+  batch.set(playerRef, {
     nombre: input.nombre,
     activo: true
   });
+  if (email) {
+    batch.set(doc(db, 'leagues', leagueId, 'playerContacts', playerRef.id), { email });
+  }
+  await batch.commit();
 }
 
 export async function deletePlayer(leagueId: string, playerId: string): Promise<void> {
@@ -50,24 +59,53 @@ export async function deletePlayer(leagueId: string, playerId: string): Promise<
   }
 
   const { db } = getFirebaseServices();
-  await deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'leagues', leagueId, 'players', playerId));
+  batch.delete(doc(db, 'leagues', leagueId, 'playerContacts', playerId));
+  await batch.commit();
 }
 
-export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
+export async function updatePlayer(
+  leagueId: string,
+  playerId: string,
+  data: { nombre: string; email?: string | null }
+): Promise<void> {
+  const emailDefined = Object.prototype.hasOwnProperty.call(data, 'email');
+  const normalizedEmail = emailDefined ? (data.email?.trim().toLowerCase() || null) : undefined;
+
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     localSnapshots.set(`${leagueId}:${snapshot.season.id}`, {
       ...snapshot,
       players: snapshot.players.map((player) =>
-        player.id === playerId ? { ...player, nombre } : player
+        player.id === playerId
+          ? { ...player, nombre: data.nombre, ...(emailDefined ? { email: normalizedEmail } : {}) }
+          : player
       )
     });
     return;
   }
 
   const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), { nombre });
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'leagues', leagueId, 'players', playerId), { nombre: data.nombre });
+  if (!emailDefined) {
+    await batch.commit();
+    return;
+  }
+
+  const contactRef = doc(db, 'leagues', leagueId, 'playerContacts', playerId);
+  if (normalizedEmail) {
+    batch.set(contactRef, { email: normalizedEmail });
+  } else {
+    batch.delete(contactRef);
+  }
+  await batch.commit();
+}
+
+export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
+  return updatePlayer(leagueId, playerId, { nombre });
 }
 
 function matchPayload(input: CreateMatchInput): Omit<CreateMatchInput, 'mvpPlayerId'> & {
@@ -195,6 +233,17 @@ export async function setWrappedEnabled(leagueId: string, enabled: boolean): Pro
 
   const { db } = getFirebaseServices();
   await setDoc(doc(db, 'leagues', leagueId, 'config', 'global'), { wrappedEnabled: enabled }, { merge: true });
+}
+
+export async function updateLeagueColor(leagueId: string, themeColor: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    const league = localLeagues.find((l) => l.id === leagueId);
+    if (league) league.themeColor = themeColor;
+    return;
+  }
+
+  const { db } = getFirebaseServices();
+  await updateDoc(doc(db, 'leagues', leagueId), { themeColor });
 }
 
 function assertActiveSeason(

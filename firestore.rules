@@ -50,6 +50,10 @@ service cloud.firestore {
         allow write: if isLeagueAdmin(leagueId);
       }
 
+      match /playerContacts/{id} {
+        allow read, write: if isLeagueAdmin(leagueId);
+      }
+
       match /seasons/{seasonId} {
         allow read: if isLeagueMember(leagueId);
         allow create: if isSignedIn() &&

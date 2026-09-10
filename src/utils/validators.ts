@@ -5,6 +5,22 @@ export function normalizePlayerName(name: string): string {
   return name.trim().replace(/\s+/g, ' ');
 }
 
+export function normalizePlayerEmail(email?: string | null): string | null {
+  if (!email) return null;
+  const trimmed = email.trim().toLowerCase();
+  return trimmed || null;
+}
+
+export function validatePlayerEmail(email?: string | null): string | null {
+  const normalized = normalizePlayerEmail(email);
+  if (!normalized) return null;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalized)) {
+    return 'El formato de correo no es válido.';
+  }
+  return null;
+}
+
 export function validatePlayerName(name: string): string | null {
   const normalized = normalizePlayerName(name);
   if (!normalized) return 'El nombre del jugador es requerido.';
