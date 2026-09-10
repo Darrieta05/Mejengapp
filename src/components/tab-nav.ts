@@ -55,22 +55,33 @@ export class TabNav extends LitElement {
 
     nav {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.6rem;
-      margin-top: 1rem;
-      margin-bottom: 1rem;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      gap: 0.5rem;
+      margin-top: 0.8rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.25rem;
+      scrollbar-width: none;
+    }
+
+    nav::-webkit-scrollbar {
+      display: none;
     }
 
     button {
+      flex-shrink: 0;
       border: 1px solid var(--surface-border);
       background: var(--surface-muted);
       color: var(--text-muted);
       border-radius: 10px;
-      padding: 0.45rem 0.75rem;
+      padding: 0.5rem 0.85rem;
       font-weight: 700;
+      font-size: 0.86rem;
       letter-spacing: 0.01em;
       cursor: pointer;
       transition: all 0.18s ease;
+      white-space: nowrap;
     }
 
     button:hover {
@@ -80,9 +91,9 @@ export class TabNav extends LitElement {
 
     .active {
       color: #fff;
-      border-color: #2dd4bf;
-      background: linear-gradient(120deg, #0f766e, #0f172a);
-      box-shadow: 0 10px 25px rgba(15, 118, 110, 0.3);
+      border-color: var(--league-color, #2dd4bf);
+      background: linear-gradient(120deg, var(--league-color, #0f766e), #0f172a);
+      box-shadow: 0 8px 20px var(--league-color-glow, rgba(15, 118, 110, 0.3));
     }
   `;
 }

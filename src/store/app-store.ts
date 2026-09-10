@@ -11,8 +11,9 @@ import {
   endSeason as endSeasonRecord,
   getSeasons,
   updateMatch,
-  updatePlayerName,
-  setWrappedEnabled
+  updatePlayer,
+  setWrappedEnabled,
+  updateLeagueColor
 } from '../services/repository';
 import type { CreateMatchInput, UpdateMatchInput } from '../types/actions';
 import type { AdminSession } from '../types/auth';
@@ -93,10 +94,30 @@ class AppStore extends EventTarget {
     }
   }
 
-  async createLeague(name: string): Promise<void> {
+  async createLeague(name: string, themeColor?: string): Promise<void> {
     const uid = this.state.session?.uid;
     if (!uid) return this.patch({ error: 'Debes iniciar sesion para crear una liga.' });
-    await this.runLeagueSetup(() => createLeagueRecord(name, uid));
+    await this.runLeagueSetup(() => createLeagueRecord(name, uid, themeColor));
+  }
+
+  async updateLeagueColor(themeColor: string): Promise<void> {
+    const leagueId = this.state.currentLeagueId;
+    if (!leagueId) return;
+    this.patch({ mutating: true, error: null });
+    try {
+      await updateLeagueColor(leagueId, themeColor);
+      const memberships = this.state.memberships.map((m) =>
+        m.league.id === leagueId
+          ? { ...m, league: { ...m.league, themeColor } }
+          : m
+      );
+      this.patch({ memberships, mutating: false });
+    } catch (error) {
+      this.patch({
+        mutating: false,
+        error: error instanceof Error ? error.message : 'No se pudo actualizar el color.'
+      });
+    }
   }
 
   async joinLeague(code: string): Promise<void> {
@@ -151,9 +172,9 @@ class AppStore extends EventTarget {
     }
   }
 
-  async addPlayer(nombre: string): Promise<void> {
+  async addPlayer(nombre: string, email?: string | null): Promise<void> {
     await this.runMutation(async (leagueId) => {
-      await createPlayer(leagueId, { nombre });
+      await createPlayer(leagueId, { nombre, email });
     });
   }
 
@@ -163,10 +184,14 @@ class AppStore extends EventTarget {
     });
   }
 
-  async renamePlayer(playerId: string, nombre: string): Promise<void> {
+  async updatePlayer(playerId: string, nombre: string, email?: string | null): Promise<void> {
     await this.runMutation(async (leagueId) => {
-      await updatePlayerName(leagueId, playerId, nombre);
+      await updatePlayer(leagueId, playerId, { nombre, email });
     });
+  }
+
+  async renamePlayer(playerId: string, nombre: string): Promise<void> {
+    await this.updatePlayer(playerId, nombre);
   }
 
   async addMatch(input: CreateMatchInput): Promise<void> {

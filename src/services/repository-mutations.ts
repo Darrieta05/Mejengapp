@@ -12,12 +12,16 @@ import { getFirebaseServices, isFirebaseConfigured } from './firebase';
 import { getLocalSnapshot, localLeagues, localSnapshots } from './repository-support';
 
 export async function createPlayer(leagueId: string, input: CreatePlayerInput): Promise<void> {
+  const email = input.email?.trim().toLowerCase() || null;
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     localSnapshots.set(`${leagueId}:${snapshot.season.id}`, {
       ...snapshot,
-      players: [...snapshot.players, { id: crypto.randomUUID(), nombre: input.nombre, activo: true }]
+      players: [
+        ...snapshot.players,
+        { id: crypto.randomUUID(), nombre: input.nombre, activo: true, email }
+      ]
     });
     return;
   }
@@ -25,7 +29,8 @@ export async function createPlayer(leagueId: string, input: CreatePlayerInput): 
   const { db } = getFirebaseServices();
   await addDoc(collection(db, 'leagues', leagueId, 'players'), {
     nombre: input.nombre,
-    activo: true
+    activo: true,
+    email
   });
 }
 
@@ -53,21 +58,33 @@ export async function deletePlayer(leagueId: string, playerId: string): Promise<
   await deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId));
 }
 
-export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
+export async function updatePlayer(
+  leagueId: string,
+  playerId: string,
+  data: { nombre: string; email?: string | null }
+): Promise<void> {
+  const email = data.email?.trim().toLowerCase() || null;
   if (!isFirebaseConfigured()) {
     const snapshot = getLocalSnapshot(leagueId);
     if (!snapshot) throw new Error('No se encontro la liga.');
     localSnapshots.set(`${leagueId}:${snapshot.season.id}`, {
       ...snapshot,
       players: snapshot.players.map((player) =>
-        player.id === playerId ? { ...player, nombre } : player
+        player.id === playerId ? { ...player, nombre: data.nombre, email } : player
       )
     });
     return;
   }
 
   const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), { nombre });
+  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), {
+    nombre: data.nombre,
+    email
+  });
+}
+
+export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
+  return updatePlayer(leagueId, playerId, { nombre });
 }
 
 function matchPayload(input: CreateMatchInput): Omit<CreateMatchInput, 'mvpPlayerId'> & {
@@ -195,6 +212,17 @@ export async function setWrappedEnabled(leagueId: string, enabled: boolean): Pro
 
   const { db } = getFirebaseServices();
   await setDoc(doc(db, 'leagues', leagueId, 'config', 'global'), { wrappedEnabled: enabled }, { merge: true });
+}
+
+export async function updateLeagueColor(leagueId: string, themeColor: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    const league = localLeagues.find((l) => l.id === leagueId);
+    if (league) league.themeColor = themeColor;
+    return;
+  }
+
+  const { db } = getFirebaseServices();
+  await updateDoc(doc(db, 'leagues', leagueId), { themeColor });
 }
 
 function assertActiveSeason(

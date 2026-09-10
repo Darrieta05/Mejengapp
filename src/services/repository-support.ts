@@ -18,7 +18,8 @@ export const demoLeague: League = {
   createdBy: 'demo-admin',
   createdAt: '2026-01-01T00:00:00.000Z',
   adminUids: ['demo-admin'],
-  activeSeasonId: demoSeason.id
+  activeSeasonId: demoSeason.id,
+  themeColor: '#0ea5e9'
 };
 
 export const localLeagues: League[] = [demoLeague];
@@ -76,7 +77,8 @@ export function mapLeague(id: string, raw: Record<string, unknown>): League {
     createdBy: String(raw.createdBy ?? ''),
     createdAt: String(raw.createdAt ?? ''),
     adminUids: Array.isArray(raw.adminUids) ? raw.adminUids.map(String) : [],
-    activeSeasonId: String(raw.activeSeasonId ?? '')
+    activeSeasonId: String(raw.activeSeasonId ?? ''),
+    themeColor: raw.themeColor ? String(raw.themeColor) : undefined
   };
 }
 
@@ -132,7 +134,8 @@ export function mapPlayers(raw: unknown[]): Player[] {
     return {
       id: String(row.id),
       nombre: String(row.nombre ?? ''),
-      activo: Boolean(row.activo ?? true)
+      activo: Boolean(row.activo ?? true),
+      email: row.email ? String(row.email).toLowerCase().trim() : null
     };
   });
 }

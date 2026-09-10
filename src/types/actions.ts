@@ -2,6 +2,7 @@ import type { MatchResult } from './models';
 
 export interface CreatePlayerInput {
   nombre: string;
+  email?: string | null;
 }
 
 export interface CreateMatchInput {

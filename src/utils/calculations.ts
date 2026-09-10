@@ -15,6 +15,7 @@ export function buildStandings(players: Player[], matches: Match[]): StandingRow
     rows.set(player.id, {
       playerId: player.id,
       nombre: player.nombre,
+      email: player.email ?? null,
       pj: 0,
       g: 0,
       e: 0,

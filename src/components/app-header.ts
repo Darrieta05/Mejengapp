@@ -15,6 +15,10 @@ export class AppHeader extends LitElement {
   @property({ type: String })
   userEmail = '';
 
+  private onOpenChooser(): void {
+    this.dispatchEvent(new CustomEvent('open-chooser', { bubbles: true, composed: true }));
+  }
+
   private onAdminToggle(): void {
     this.dispatchEvent(new CustomEvent('toggle-admin', { bubbles: true, composed: true }));
   }
@@ -27,7 +31,12 @@ export class AppHeader extends LitElement {
     return html`
       <header>
         <div class="title-block">
-          <h1>Mejengapp</h1>
+          <div class="brand-row">
+            <h1>Mejengapp</h1>
+            <button class="hub-btn" @click=${this.onOpenChooser} title="Ver todas mis ligas">
+              🏠 Mis Ligas
+            </button>
+          </div>
           <p>${this.seasonLabel}</p>
         </div>
         <div class="status-block">
@@ -35,7 +44,7 @@ export class AppHeader extends LitElement {
           <slot name="league-switcher"></slot>
           <slot name="season-switcher"></slot>
           ${this.userEmail ? html`<span class="user">${this.userEmail}</span>` : null}
-          ${this.adminMode ? html`<button @click=${this.onAdminToggle}>Panel admin</button>` : null}
+          ${this.adminMode ? html`<button class="admin-btn" @click=${this.onAdminToggle}>Panel admin</button>` : null}
           <button class="logout" @click=${this.onLogout}>Salir</button>
         </div>
       </header>
@@ -97,6 +106,32 @@ export class AppHeader extends LitElement {
       white-space: nowrap;
     }
 
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .hub-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--surface-border);
+      font-size: 0.76rem;
+      padding: 0.3rem 0.65rem;
+      color: #7dd3fc;
+      border-radius: 8px;
+    }
+
+    .hub-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .admin-btn {
+      background: rgba(250, 204, 21, 0.15);
+      border-color: rgba(250, 204, 21, 0.4);
+      color: #fde047;
+    }
+
     button {
       border: 1px solid var(--surface-border);
       background: rgba(255, 255, 255, 0.06);
@@ -115,10 +150,19 @@ export class AppHeader extends LitElement {
       header {
         flex-direction: column;
         align-items: flex-start;
+        gap: 0.8rem;
+        padding: 0.9rem;
+      }
+      .title-block {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
       .status-block {
         width: 100%;
         justify-content: space-between;
+        gap: 0.5rem;
       }
     }
   `;

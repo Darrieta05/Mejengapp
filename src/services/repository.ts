@@ -38,7 +38,9 @@ export {
   deletePlayer,
   editMatch as updateMatch,
   renamePlayer as updatePlayerName,
-  setWrappedEnabled
+  updatePlayer,
+  setWrappedEnabled,
+  updateLeagueColor
 } from './repository-mutations';
 export { endSeason, getSeasons } from './repository-seasons';
 
@@ -81,7 +83,7 @@ export async function getUserLeagues(uid: string): Promise<UserLeague[]> {
     .sort((a, b) => a.league.name.localeCompare(b.league.name));
 }
 
-export async function createLeague(name: string, uid: string): Promise<UserLeague> {
+export async function createLeague(name: string, uid: string, themeColor?: string): Promise<UserLeague> {
   const normalizedName = name.trim().replace(/\s+/g, ' ');
   if (!normalizedName) throw new Error('El nombre de la liga es requerido.');
 
@@ -95,7 +97,8 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
       createdBy: uid,
       createdAt: new Date().toISOString(),
       adminUids: [uid],
-      activeSeasonId: crypto.randomUUID()
+      activeSeasonId: crypto.randomUUID(),
+      themeColor: themeColor || '#0ea5e9'
     };
     const membership: LeagueMembership = {
       uid,
@@ -137,7 +140,7 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
 
         const leagueRef = doc(collection(db, 'leagues'));
         const membershipRef = doc(db, 'memberships', makeMembershipId(uid, leagueRef.id));
-          const seasonRef = doc(collection(db, 'leagues', leagueRef.id, 'seasons'));
+        const seasonRef = doc(collection(db, 'leagues', leagueRef.id, 'seasons'));
         const createdAt = new Date().toISOString();
         const league: League = {
           id: leagueRef.id,
@@ -146,7 +149,8 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
           createdBy: uid,
           createdAt,
           adminUids: [uid],
-          activeSeasonId: seasonRef.id
+          activeSeasonId: seasonRef.id,
+          themeColor: themeColor || '#0ea5e9'
         };
         const season: Season = {
           id: seasonRef.id,
@@ -171,7 +175,8 @@ export async function createLeague(name: string, uid: string): Promise<UserLeagu
           createdBy: uid,
           createdAt,
           adminUids: [uid],
-          activeSeasonId: season.id
+          activeSeasonId: season.id,
+          themeColor: league.themeColor
         });
         transaction.set(seasonRef, season);
         transaction.set(codeRef, { leagueId: leagueRef.id });
