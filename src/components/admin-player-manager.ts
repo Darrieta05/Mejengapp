@@ -18,7 +18,7 @@ export class AdminPlayerManager extends LitElement {
     const leagueName = this.league?.name ?? 'nuestra liga';
     const code = this.league?.code ?? '';
     const subject = encodeURIComponent(`Invitación a unirte a la liga ${leagueName} - Mejengapp`);
-    const appUrl = window.location.origin;
+    const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin).href;
     const body = encodeURIComponent(
       `¡Hola ${player.nombre}!\n\n` +
       `Te invito a unirte a nuestra liga "${leagueName}" en Mejengapp.\n\n` +
@@ -34,14 +34,16 @@ export class AdminPlayerManager extends LitElement {
       new CustomEvent('create-player', {
         detail: {
           nombre: this.newPlayerName,
-          email: this.newPlayerEmail.trim() || null
+          email: this.newPlayerEmail.trim() || null,
+          onSuccess: () => {
+            this.newPlayerName = '';
+            this.newPlayerEmail = '';
+          }
         },
         bubbles: true,
         composed: true
       })
     );
-    this.newPlayerName = '';
-    this.newPlayerEmail = '';
   }
 
   private startEdit(player: Player): void {
@@ -181,7 +183,7 @@ export class AdminPlayerManager extends LitElement {
       padding: 0.8rem;
       background: rgba(15, 23, 42, 0.45);
       min-width: 0;
-      overflow: hidden;
+      position: relative;
     }
 
     h3 {
@@ -235,6 +237,9 @@ export class AdminPlayerManager extends LitElement {
       border: none;
       padding: 0.55rem;
       width: 100%;
+      min-height: 44px;
+      position: relative;
+      z-index: 10;
       transition: opacity 0.2s;
     }
 

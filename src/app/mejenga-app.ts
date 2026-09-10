@@ -83,9 +83,7 @@ export class MejengaApp extends LitElement {
     document.documentElement.style.setProperty('--league-color-glow', `${themeColor}40`);
   }
 
-  private onTabChange(event: CustomEvent<{ tab: AppTab }>): void {
-    this.currentTab = event.detail.tab;
-  }
+  private onTabChange(event: CustomEvent<{ tab: AppTab }>): void { this.currentTab = event.detail.tab; }
 
   private async onAdminToggle(): Promise<void> {
     if (!this.sessionEmail) {
@@ -101,13 +99,9 @@ export class MejengaApp extends LitElement {
     this.showAdminPanel = !this.showAdminPanel;
   }
 
-  private async onLogoutAdmin(): Promise<void> {
-    await appStore.logout();
-  }
+  private async onLogoutAdmin(): Promise<void> { await appStore.logout(); }
 
-  private async onSignIn(): Promise<void> {
-    await appStore.login();
-  }
+  private async onSignIn(): Promise<void> { await appStore.login(); }
 
   private async onLogout(): Promise<void> {
     this.showLeagueChooser = false;
@@ -138,7 +132,9 @@ export class MejengaApp extends LitElement {
 
   private async onLeagueChange(event: CustomEvent<{ leagueId: string }>): Promise<void> {
     await appStore.switchLeague(event.detail.leagueId);
-    this.showLeagueChooser = false;
+    if (appStore.getState().snapshot) {
+      this.showLeagueChooser = false;
+    }
   }
 
   private async onChangeLeagueColor(event: CustomEvent<{ color: string }>): Promise<void> {
@@ -146,13 +142,9 @@ export class MejengaApp extends LitElement {
     await appStore.updateLeagueColor(event.detail.color);
   }
 
-  private async onSeasonChange(event: CustomEvent<{ seasonId: string }>): Promise<void> {
-    await appStore.switchSeason(event.detail.seasonId);
-  }
+  private async onSeasonChange(event: CustomEvent<{ seasonId: string }>): Promise<void> { await appStore.switchSeason(event.detail.seasonId); }
 
-  private async onEndSeason(event: CustomEvent<{ name: string }>): Promise<void> {
-    await appStore.endCurrentSeason(event.detail.name);
-  }
+  private async onEndSeason(event: CustomEvent<{ name: string }>): Promise<void> { await appStore.endCurrentSeason(event.detail.name); }
 
   private openLeagueChooser(): void {
     this.showLeagueChooser = true;
@@ -162,13 +154,16 @@ export class MejengaApp extends LitElement {
     this.showLeagueChooser = false;
   }
 
-  private async onCreatePlayer(event: CustomEvent<{ nombre: string; email?: string | null }>): Promise<void> {
+  private async onCreatePlayer(event: CustomEvent<{ nombre: string; email?: string | null; onSuccess?: () => void }>): Promise<void> {
     if (!this.isAdmin) return;
     const nombre = normalizePlayerName(event.detail.nombre);
     const email = normalizePlayerEmail(event.detail.email);
     const err = validatePlayerName(nombre) || validatePlayerEmail(email);
     if (err) return void (this.error = err);
     await appStore.addPlayer(nombre, email);
+    if (!appStore.getState().error && event.detail.onSuccess) {
+      event.detail.onSuccess();
+    }
   }
 
   private async onDeletePlayer(event: CustomEvent<{ playerId: string }>): Promise<void> {
@@ -317,11 +312,12 @@ export class MejengaApp extends LitElement {
     const player = this.snapshot.players.find((p) => p.id === this.selectedPlayerProfileId);
     if (!player) return null;
 
+    const filteredHistories = this.histories.filter((h) => h.seasonId !== this.snapshot!.season.id);
     const standing = aggregatePlayerHistoricalStats(
       player,
       this.snapshot.matches,
       this.snapshot.players,
-      this.histories
+      filteredHistories
     );
 
     return html`

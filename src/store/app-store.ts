@@ -77,10 +77,7 @@ class AppStore extends EventTarget {
       const session = await signInWithGoogle();
       await this.applySession(session);
     } catch (error) {
-      this.patch({
-        loading: false,
-        error: error instanceof Error ? error.message : 'No se pudo iniciar sesion.'
-      });
+      this.patch({ loading: false, error: error instanceof Error ? error.message : 'No se pudo iniciar sesion.' });
     }
   }
 
@@ -90,10 +87,7 @@ class AppStore extends EventTarget {
       await signOutAdmin();
       await this.applySession(null);
     } catch (error) {
-      this.patch({
-        mutating: false,
-        error: error instanceof Error ? error.message : 'No se pudo cerrar sesion.'
-      });
+      this.patch({ mutating: false, error: error instanceof Error ? error.message : 'No se pudo cerrar sesion.' });
     }
   }
 
@@ -183,7 +177,11 @@ class AppStore extends EventTarget {
 
   async updatePlayer(playerId: string, nombre: string, email?: string | null): Promise<void> {
     await this.runMutation(async (leagueId) => {
-      await updatePlayer(leagueId, playerId, { nombre, email });
+      const payload: { nombre: string; email?: string | null } = { nombre };
+      if (email !== undefined) {
+        payload.email = email;
+      }
+      await updatePlayer(leagueId, playerId, payload);
     });
   }
 

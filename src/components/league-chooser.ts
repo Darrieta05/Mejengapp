@@ -16,8 +16,13 @@ export class LeagueChooser extends LitElement {
   @state() private selectedColor = '#0ea5e9';
   @state() private activeTab: 'create' | 'join' = 'create';
 
+  @state() private activating = false;
+
   private selectLeague(leagueId: string): void {
+    if (this.activating || this.busy) return;
+    this.activating = true;
     this.dispatchEvent(new CustomEvent('league-change', { detail: { leagueId }, bubbles: true, composed: true }));
+    setTimeout(() => { this.activating = false; }, 1000);
   }
 
   private createLeague(event: Event): void {
@@ -103,7 +108,7 @@ export class LeagueChooser extends LitElement {
                 <button
                   class="enter-btn"
                   style="background: ${color};"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || this.activating}
                   @click=${() => this.selectLeague(item.league.id)}
                 >Entrar a la liga</button>
               </div>
@@ -203,6 +208,7 @@ export class LeagueChooser extends LitElement {
     .enter-btn {
       margin-top: 0.2rem; border: none; border-radius: 8px; padding: 0.5rem;
       color: #fff; font-weight: 700; font-size: 0.86rem; cursor: pointer;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
     }
     .hub-tabs { display: flex; gap: 0.6rem; margin-top: 1.3rem; border-bottom: 1px solid var(--surface-border); padding-bottom: 0.6rem; }
     .hub-tab {
@@ -227,6 +233,7 @@ export class LeagueChooser extends LitElement {
     .submit-btn {
       margin-top: 0.4rem; border: none; border-radius: 8px; padding: 0.65rem;
       background: #0ea5e9; color: #fff; font-weight: 800; font-size: 0.9rem; cursor: pointer;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
     }
     button:disabled { cursor: wait; opacity: 0.65; }
     .quiet {
