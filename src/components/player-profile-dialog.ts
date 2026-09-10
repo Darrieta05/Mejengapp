@@ -38,7 +38,7 @@ export class PlayerProfileDialog extends LitElement {
 
     return html`
       <div class="backdrop" @click=${this.onBackdropClick}>
-        <div class="card" role="dialog" aria-modal="true">
+        <div class="card" role="dialog" aria-modal="true" aria-label="Perfil de ${this.player.nombre}">
           <header>
             <div class="avatar-row">
               <div class="avatar">${this.player.nombre.charAt(0).toUpperCase()}</div>
