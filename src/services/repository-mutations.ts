@@ -1,6 +1,6 @@
 import {
+  writeBatch,
   collection,
-  deleteDoc,
   doc,
   runTransaction,
   setDoc,
@@ -27,13 +27,15 @@ export async function createPlayer(leagueId: string, input: CreatePlayerInput): 
 
   const { db } = getFirebaseServices();
   const playerRef = doc(collection(db, 'leagues', leagueId, 'players'));
-  await setDoc(playerRef, {
+  const batch = writeBatch(db);
+  batch.set(playerRef, {
     nombre: input.nombre,
     activo: true
   });
   if (email) {
-    await setDoc(doc(db, 'leagues', leagueId, 'playerContacts', playerRef.id), { email });
+    batch.set(doc(db, 'leagues', leagueId, 'playerContacts', playerRef.id), { email });
   }
+  await batch.commit();
 }
 
 export async function deletePlayer(leagueId: string, playerId: string): Promise<void> {
@@ -57,10 +59,10 @@ export async function deletePlayer(leagueId: string, playerId: string): Promise<
   }
 
   const { db } = getFirebaseServices();
-  await Promise.all([
-    deleteDoc(doc(db, 'leagues', leagueId, 'players', playerId)),
-    deleteDoc(doc(db, 'leagues', leagueId, 'playerContacts', playerId))
-  ]);
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'leagues', leagueId, 'players', playerId));
+  batch.delete(doc(db, 'leagues', leagueId, 'playerContacts', playerId));
+  await batch.commit();
 }
 
 export async function updatePlayer(
@@ -86,15 +88,20 @@ export async function updatePlayer(
   }
 
   const { db } = getFirebaseServices();
-  await updateDoc(doc(db, 'leagues', leagueId, 'players', playerId), { nombre: data.nombre });
-  if (!emailDefined) return;
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'leagues', leagueId, 'players', playerId), { nombre: data.nombre });
+  if (!emailDefined) {
+    await batch.commit();
+    return;
+  }
 
   const contactRef = doc(db, 'leagues', leagueId, 'playerContacts', playerId);
   if (normalizedEmail) {
-    await setDoc(contactRef, { email: normalizedEmail });
-    return;
+    batch.set(contactRef, { email: normalizedEmail });
+  } else {
+    batch.delete(contactRef);
   }
-  await deleteDoc(contactRef);
+  await batch.commit();
 }
 
 export async function renamePlayer(leagueId: string, playerId: string, nombre: string): Promise<void> {
