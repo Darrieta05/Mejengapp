@@ -74,7 +74,8 @@ class AppStore extends EventTarget {
   async login(): Promise<void> {
     this.patch({ error: null, loading: true });
     try {
-      await signInWithGoogle();
+      const session = await signInWithGoogle();
+      await this.applySession(session);
     } catch (error) {
       this.patch({
         loading: false,
