@@ -16,7 +16,7 @@ export function validatePlayerEmail(email?: string | null): string | null {
   if (!normalized) return null;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(normalized)) {
-    return 'El formato de correo no es valido.';
+    return 'El formato de correo no es válido.';
   }
   return null;
 }
