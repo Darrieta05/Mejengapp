@@ -86,7 +86,7 @@ export class PlayerProfileDialog extends LitElement {
           <section class="matches-history">
             <h3>Partidos en la temporada (${playerMatches.length})</h3>
             ${playerMatches.length === 0
-              ? html`<p class="empty-matches">Aun no ha jugado partidos en esta temporada.</p>`
+              ? html`<p class="empty-matches">Aún no ha jugado partidos en esta temporada.</p>`
               : html`
                   <div class="history-list">
                     ${[...playerMatches].reverse().map((match) => {
